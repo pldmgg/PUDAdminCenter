@@ -9,7 +9,7 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-RootModule = 'PUDAdminCenterPrototype.psm1'
+RootModule = 'PUDAdminCenter.psm1'
 
 # Version number of this module.
 ModuleVersion = '0.1.0'
@@ -18,7 +18,7 @@ ModuleVersion = '0.1.0'
 # CompatiblePSEditions = @()
 
 # ID used to uniquely identify this module
-GUID = '5a6f302e-aff9-42c8-86e5-349bc8b14735'
+GUID = '68e5cc6a-6753-4034-9a6e-17876064e656'
 
 # Author of this module
 Author = 'pldmgg'
@@ -30,7 +30,7 @@ CompanyName = 'pldmgg'
 Copyright = '(c) 2018 pldmgg. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Recreating the Windows Admin Center (https://docs.microsoft.com/en-us/windows-server/manage/windows-admin-center/overview) via PowerShell Universal Dashboard. GitHub: https://github.com/pldmgg/PUDWinAdminCenter'
+Description = 'Recreating the Windows Admin Center (https://docs.microsoft.com/en-us/windows-server/manage/windows-admin-center/overview) via PowerShell Universal Dashboard to manage Windows and Linux via Web GUI. GitHub: https://github.com/pldmgg/PUDAdminCenter'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '5.1'
@@ -94,7 +94,7 @@ AliasesToExport = '*'
 # ModuleList = @()
 
 # List of all files packaged with this module
-FileList = 'PUDAdminCenterPrototype.psm1', 'PUDAdminCenterPrototype.psd1'
+FileList = 'PUDAdminCenter.psm1', 'PUDAdminCenter.psd1'
 
 # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
 PrivateData = @{
