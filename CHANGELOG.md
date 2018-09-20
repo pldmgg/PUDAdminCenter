@@ -1,6 +1,6 @@
 # Change log
 
-## 0.0.1 (September 20, 2018)
+## 0.1.0 (September 20, 2018)
 
 - Created
 
