@@ -86,6 +86,29 @@ if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
     $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
     #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
     $($ModuleManifestData.GetEnumerator()) | foreach {
+        if ($_.Key -ne "PSDependOptions") {
+            $PSObj = [pscustomobject]@{
+                Name    = $_.Key
+                Version = $_.Value.Version
+            }
+            $null = $ModulesToinstallAndImport.Add($PSObj)
+        }
+    }
+}
+
+if ($ModulesToInstallAndImport.Count -gt 0) {
+    foreach ($ModuleItem in $ModulesToInstallAndImport) {
+        if (!$(Get-Module -ListAvailable $ModuleItem.Name -ErrorAction SilentlyContinue)) {Install-Module $ModuleItem.Name}
+        if (!$(Get-Module $ModuleItem.Name -ErrorAction SilentlyContinue)) {Import-Module $ModuleItem.Name}
+    }
+}
+
+<#
+[System.Collections.Arraylist]$ModulesToInstallAndImport = @()
+if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
+    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
+    #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+    $($ModuleManifestData.GetEnumerator()) | foreach {
         $PSObj = [pscustomobject]@{
             Name    = $_.Key
             Version = $_.Value.Version
@@ -105,6 +128,7 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     }
     $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
 }
+#>
 
 # Public Functions
 '@
@@ -131,10 +155,10 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     $ImportUDCommCode = @'
 
 # Can't just install and import UniversalDashboard.Community automatically because of interactive license agreement prompt. So, it must be done
-# manually before trying to import PUDAdminCenterPrototype.
+# manually before trying to import PUDAdminCenter.
 if (![bool]$(Get-Module -ListAvailable UniversalDashboard.Community)) {
     $InstallPUDCommunityMsg = "Please install the UniversalDashboard.Community PowerShell Module via...`n    Install-Module UniversalDashboard.Community`n..." +
-    "and try importing the PUDAdminCenterPrototype Module in a fresh Windows PowerShell 5.1 session."
+    "and try importing the PUDAdminCenter Module in a fresh Windows PowerShell 5.1 session."
     Write-Warning $InstallPUDCommunityMsg
     Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
     $global:FunctionResult = "1"
@@ -290,8 +314,8 @@ Task Deploy -Depends Build {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyjrMzCHtMzyDOPcnP9TPka7q
-# IPmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUg9NH9RFDO7APfP2ewY2TMH7e
+# bJGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -348,11 +372,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGo4nn39zW4tpUL9
-# mWXgOIPK9fduMA0GCSqGSIb3DQEBAQUABIIBABsrM2qj9g3n/eJes19MIVXevMYn
-# 6GYqw1xjYqZWxTLI8GOc5+WCM+bPO5xc6v8W4lVAU/7KOZqAvzmPeQb74YSLLRDb
-# Da6FbGSmCinklGKfyja8OdWphSngegmTAgQc8UuJGNpBq5f17ksv/iit8o9ALRjE
-# tlA3oV75792duvdMn1Pvz9jdaY9jsb1Z78JNpm/c0d10ZCngG7/kXS2PcqpThXH/
-# WOiHVV3WP+9RdVVWvNnXqITh0UNOaKaaAdfL2F8+GjfDoW3BhDyc19HB4aC5lOWY
-# YNwA2DT5UGD9QYt4IdHEINauxpJOJz2kmR/Fwe8ReoXSQ4+D4kMlEe77Rvw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIMKi8NbRKrpKY8L
+# j108DFVZ75BQMA0GCSqGSIb3DQEBAQUABIIBAJBrH+qHikmMC5x2CcCaKzpaDgY9
+# xodg/ooAyOf17q6YJEHY9rMIQ29WBpfawXM2Gpw+0QE8ClzkhDhUYc8Q4YSshg9o
+# 3exPkDfcaP67eQCeMvUZn06WbHlCZz3XdLSc5SNkO6Rl74fwnb2zr1vF5RLTXFuF
+# iczUSqLqFa3Jy4eSnzL84R4MipaVRrvyqhuHJbhr7QX7TbBS01htCnRQh+h9PRnR
+# nnAJsjGG+IPCfODV/sR/90hKnXd/R9WlMaSnSulZBcykbOLhvj+utfCAr0z69aoV
+# +g02NaYia81v6MLKZs2KEvod8z077So8BN+5HWhPkpJ6Roq5w9UbBl/pTts=
 # SIG # End signature block

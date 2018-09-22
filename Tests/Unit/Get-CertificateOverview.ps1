@@ -6,14 +6,14 @@ param(
 # NOTE: `Set-BuildEnvironment -Force -Path $PSScriptRoot` from build.ps1 makes the following $env: available:
 <#
     $env:BHBuildSystem = "Unknown"
-    $env:BHProjectPath = "U:\powershell\ProjectRepos\PUDAdminCenterPrototype"
+    $env:BHProjectPath = "U:\powershell\ProjectRepos\PUDAdminCenter"
     $env:BHBranchName = "master"
     $env:BHCommitMessage = "!deploy"
     $env:BHBuildNumber = 0
-    $env:BHProjectName = "PUDAdminCenterPrototype"
-    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\PUDAdminCenterPrototype\PUDAdminCenterPrototype\PUDAdminCenterPrototype.psd1"
-    $env:BHModulePath = "U:\powershell\ProjectRepos\PUDAdminCenterPrototype\PUDAdminCenterPrototype"
-    $env:BHBuildOutput = "U:\powershell\ProjectRepos\PUDAdminCenterPrototype\BuildOutput"
+    $env:BHProjectName = "PUDAdminCenter"
+    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\PUDAdminCenter\PUDAdminCenter\PUDAdminCenter.psd1"
+    $env:BHModulePath = "U:\powershell\ProjectRepos\PUDAdminCenter\PUDAdminCenter"
+    $env:BHBuildOutput = "U:\powershell\ProjectRepos\PUDAdminCenter\BuildOutput"
 #>
 
 # NOTE: If -TestResources was used, the folloqing resources should be available
@@ -31,8 +31,8 @@ param(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUeKg588URzzmveHew3H5lm9LH
-# mdqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHKcbDxjUuw1tTdncTIRL8Mww
+# cDqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -89,11 +89,11 @@ param(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOSpE1TZSshPIB40
-# ZKTGAsacrt4PMA0GCSqGSIb3DQEBAQUABIIBAG1O4LwjCOEBFB31XDSrip3OQ/c1
-# OYq/3oljIui5Nya/Xa9ZlRENagp/HzGeJGv0A32o+DUJPubWdpHWGVhNFlHQE8or
-# aTVpt25hjvT8zCuCefgn81v5tQ2qn81jvPheEosI3ZLI1rs9zShnDctechfol6iu
-# ONpyYHYMhgSR87b6Jg993myfLzVSiJLI0nElr8G+6mJraEollz1TLTwe3oQHYjer
-# UYyNCS7GSZKHtD3yzEgHcW9cvive0ilwhPOsj8UvjgIGm8wHUaRs90L45yg8XKcD
-# gv/qeKyv226lfvBXQKXJ1JL2BuLCrykwM/Zhfx4eXaL53Kz2rWg2gd4ZD3o=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLIoqE4gS7woJ0CG
+# kV0Xz11d/4a3MA0GCSqGSIb3DQEBAQUABIIBAFmaBg6hZLXEEoSM8cmXqvdHJqrQ
+# c8KQNHekoUYPmSZuX5E4+nfoHzLkqJwr01Fe5WHHW7dv5EZcdVP3iPzNocBy7nL+
+# QRj3LcpNt87NRI3pmJ18+N40oiaKIK4ZUedb2pfu2izR813Hh4Q2cncpGZGPNMrI
+# 31clnahtFcxo35qRQgdkp3683SqtOauGBv2oO4IBhpXNvv3YoXKFfBFwJFbMTdXw
+# 95lKQTMHQBoi7D8uW9W9n7kDqbp5oYK43+RwkxcV5BJ5h+wTvwR4rLN60f/IrZhq
+# Tfjpm1xOWABHpHVd93dWXd4qeZs0ENgnjo3s8SvmgRhdR8TbG8uKmwecNKU=
 # SIG # End signature block

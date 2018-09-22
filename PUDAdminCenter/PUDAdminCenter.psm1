@@ -20,6 +20,29 @@ if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
     $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
     #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
     $($ModuleManifestData.GetEnumerator()) | foreach {
+        if ($_.Key -ne "PSDependOptions") {
+            $PSObj = [pscustomobject]@{
+                Name    = $_.Key
+                Version = $_.Value.Version
+            }
+            $null = $ModulesToinstallAndImport.Add($PSObj)
+        }
+    }
+}
+
+if ($ModulesToInstallAndImport.Count -gt 0) {
+    foreach ($ModuleItem in $ModulesToInstallAndImport) {
+        if (!$(Get-Module -ListAvailable $ModuleItem.Name -ErrorAction SilentlyContinue)) {Install-Module $ModuleItem.Name}
+        if (!$(Get-Module $ModuleItem.Name -ErrorAction SilentlyContinue)) {Import-Module $ModuleItem.Name}
+    }
+}
+
+<#
+[System.Collections.Arraylist]$ModulesToInstallAndImport = @()
+if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
+    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
+    #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+    $($ModuleManifestData.GetEnumerator()) | foreach {
         $PSObj = [pscustomobject]@{
             Name    = $_.Key
             Version = $_.Value.Version
@@ -39,6 +62,7 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     }
     $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
 }
+#>
 
 # Public Functions
 
@@ -2113,7 +2137,7 @@ function Get-PUDAdminCenter {
         [int]$Port = 80,
 
         [Parameter(Mandatory=$False)]
-        [switch]$InstallNmap = $True,
+        [switch]$InstallNmap = $False,
 
         [Parameter(Mandatory=$False)]
         [switch]$RemoveExistingPUD = $True
@@ -2136,7 +2160,7 @@ function Get-PUDAdminCenter {
     }
 
     # Define all of this Module's functions (both Public and Private) as an array of strings so that we can easily load them in different contexts/scopes
-    $ThisModuleFunctionsStringArray =  $(Get-Module PUDAdminCenterPrototype).Invoke({$FunctionsForSBUse})
+    $ThisModuleFunctionsStringArray =  $(Get-Module PUDAdminCenter).Invoke({$FunctionsForSBUse})
 
     # Create the $Pages ArrayList that will be used with 'New-UDDashboard -Pages'
     [System.Collections.ArrayList]$Pages = @()
@@ -2196,7 +2220,7 @@ function Get-PUDAdminCenter {
     #     2) If you are planning on using Live (Realtime) Data, ensure you add one or more keys that will contain
     #     Live Data. (For the PUDAdminCenter App, this is the LiveDataRSInfo Key that exists within a hashtable
     #     dedicated to each specific Remote Host)
-    # For this PUDAdminCenterPrototype Application, the structure of the $PUDRSSyncHT will look like...
+    # For this PUDAdminCenter Application, the structure of the $PUDRSSyncHT will look like...
     <#
         @{
             RemoteHostList   = $null
@@ -2224,10 +2248,10 @@ function Get-PUDAdminCenter {
     # Let's populate $PUDRSSyncHT.RemoteHostList with information that will be needed immediately upon navigating to the $HomePage.
     # For this reason, we're gathering the info before we start the UDDashboard. (Note that the below 'GetComputerObjectInLDAP' Private
     # function gets all Computers in Active Directory without using the ActiveDirectory PowerShell Module)
-    [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP).Name
+    [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 20).Name
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
-    $InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
+    #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
     if ($PSVersionTable.PSEdition -eq "Core") {
         [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$_ -replace "CN=",""}
     }
@@ -2235,7 +2259,21 @@ function Get-PUDAdminCenter {
     # Filter Out the Remote Hosts that we can't resolve
     [System.Collections.ArrayList]$InitialRemoteHostList = @()
 
-    $null = Clear-DnsClientCache
+    # NOTE: Not having the Platform Property necessarily means we're on Windows PowerShell
+    if ($PSVersionTable.Platform -eq "Win32NT" -or !$PSVersionTable.Platform) {
+        if ($PSVersionTable.PSEdition -eq "Core") {
+            Invoke-WinCommand -ComputerName localhost -ScriptBlock {
+                $null = Clear-DnsClientCache
+            }
+        }
+        else {
+            $null = Clear-DnsClientCache
+        }
+    }
+    else {
+        Write-Verbose "Flushing the DNS Client Cache is generally not needed on Linux since the default (for most distros) is not to cache anything."
+    }
+    
     foreach ($HName in $InitialRemoteHostListPrep) {
         try {
             $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
@@ -3896,7 +3934,7 @@ function Get-PUDAdminCenter {
         $PUDRSSyncHT = $global:PUDRSSyncHT
     
         # Define some Cache: variables that we'll be using in a lot of different contexts
-        $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenterPrototype).Invoke({$FunctionsForSBUse})
+        $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenter).Invoke({$FunctionsForSBUse})
     
         $Cache:DynamicPages = $DynamicPages = @(
             "PSRemotingCreds"
@@ -3962,7 +4000,7 @@ function Get-PUDAdminCenter {
                     $Session:ScanNetwork = $True
                     Sync-UDElement -Id "ScanNetwork"
     
-                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP).Name
+                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
                     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
                     # the user to specify individual/range of hosts/devices that they want to manage.
                     #$ScanRemoteHostListPrep = $ScanRemoteHostListPrep[0..20]
@@ -7093,10 +7131,10 @@ function Stop-DiskPerf {
 
 
 # Can't just install and import UniversalDashboard.Community automatically because of interactive license agreement prompt. So, it must be done
-# manually before trying to import PUDAdminCenterPrototype.
+# manually before trying to import PUDAdminCenter.
 if (![bool]$(Get-Module -ListAvailable UniversalDashboard.Community)) {
     $InstallPUDCommunityMsg = "Please install the UniversalDashboard.Community PowerShell Module via...`n    Install-Module UniversalDashboard.Community`n..." +
-    "and try importing the PUDAdminCenterPrototype Module in a fresh Windows PowerShell 5.1 session."
+    "and try importing the PUDAdminCenter Module in a fresh Windows PowerShell 5.1 session."
     Write-Warning $InstallPUDCommunityMsg
     Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
     $global:FunctionResult = "1"
@@ -7215,8 +7253,8 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+JN9GUgaIY7q0lgnPvV9LewM
-# DFKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUu044KJRM6J2XtfeG6Rff8FxW
+# hkSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -7273,11 +7311,11 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNApEsdw5qyXrji/
-# XYAw9YtFxM/zMA0GCSqGSIb3DQEBAQUABIIBAAlHVxcc2s4tdLtaVffH6jJZltgy
-# VMGQraWSVbj/Fm4Di7W5PO7KCZ7azSzNxSqizKhcHnK5dRhkLGePEgkdQvIVURhq
-# kVsW9yEV91QJd/4XF9DK6FHUzdPufk2+DrUDmVXpiYb+HByXS4QeJpt/gw0aSdwk
-# 1U8v+puvQ+xCJbUJEhnO/PIRBIdyIYQbE7SloTJWY0+rK5aXz5eh+ehWMX0qTIzb
-# XnERyYKwsHLpLMBt/mafbZkc6P6iUvM82/E8PkUvYmLT7JonkUVLixSrEfb3Ldwg
-# JXZ6AWPMSJUIOEcy6/QGu2lD0n7WXYfglqezAIKNlP7gGfDbGK8yOsF4sC4=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMV33YM+SFfMeyvU
+# I9Kimv8ZZxwkMA0GCSqGSIb3DQEBAQUABIIBAHDR+VPZabuqOYHOLT/RzKs974vU
+# sQa3vamUCoddUzXrix44T6JzzucKxPrxGPhmpG+i/W5moJnbuBT7aCaKNvIq+TIU
+# J/Lg/5LbbkqAlO9g+mj0ob8gvyTj2NJuHKFKXsenzdkaPKfQ4A1h6+HHHLdMlHpu
+# 0kvq8mExDBfpcFwhvp9idkAffA8odUU2aSmBfY9EsCs5fknQ71uOrWqo8Uoqaxgj
+# PklwpoPu52jeN6HHkMCbDhq+I0WPlm4LJUfn4WxBdOzBB+Ak2f2kdvUYyKMWf/kq
+# ju479WAiCEvr3pY1Ajca3Ec8wUhmAtIWXriSfpuIg4C4oISHz1hg7zLZWqU=
 # SIG # End signature block

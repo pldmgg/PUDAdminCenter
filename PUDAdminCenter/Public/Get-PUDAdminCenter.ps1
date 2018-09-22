@@ -38,7 +38,7 @@ function Get-PUDAdminCenter {
         [int]$Port = 80,
 
         [Parameter(Mandatory=$False)]
-        [switch]$InstallNmap = $True,
+        [switch]$InstallNmap = $False,
 
         [Parameter(Mandatory=$False)]
         [switch]$RemoveExistingPUD = $True
@@ -61,7 +61,7 @@ function Get-PUDAdminCenter {
     }
 
     # Define all of this Module's functions (both Public and Private) as an array of strings so that we can easily load them in different contexts/scopes
-    $ThisModuleFunctionsStringArray =  $(Get-Module PUDAdminCenterPrototype).Invoke({$FunctionsForSBUse})
+    $ThisModuleFunctionsStringArray =  $(Get-Module PUDAdminCenter).Invoke({$FunctionsForSBUse})
 
     # Create the $Pages ArrayList that will be used with 'New-UDDashboard -Pages'
     [System.Collections.ArrayList]$Pages = @()
@@ -121,7 +121,7 @@ function Get-PUDAdminCenter {
     #     2) If you are planning on using Live (Realtime) Data, ensure you add one or more keys that will contain
     #     Live Data. (For the PUDAdminCenter App, this is the LiveDataRSInfo Key that exists within a hashtable
     #     dedicated to each specific Remote Host)
-    # For this PUDAdminCenterPrototype Application, the structure of the $PUDRSSyncHT will look like...
+    # For this PUDAdminCenter Application, the structure of the $PUDRSSyncHT will look like...
     <#
         @{
             RemoteHostList   = $null
@@ -149,10 +149,10 @@ function Get-PUDAdminCenter {
     # Let's populate $PUDRSSyncHT.RemoteHostList with information that will be needed immediately upon navigating to the $HomePage.
     # For this reason, we're gathering the info before we start the UDDashboard. (Note that the below 'GetComputerObjectInLDAP' Private
     # function gets all Computers in Active Directory without using the ActiveDirectory PowerShell Module)
-    [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP).Name
+    [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 20).Name
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
-    $InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
+    #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
     if ($PSVersionTable.PSEdition -eq "Core") {
         [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$_ -replace "CN=",""}
     }
@@ -160,7 +160,21 @@ function Get-PUDAdminCenter {
     # Filter Out the Remote Hosts that we can't resolve
     [System.Collections.ArrayList]$InitialRemoteHostList = @()
 
-    $null = Clear-DnsClientCache
+    # NOTE: Not having the Platform Property necessarily means we're on Windows PowerShell
+    if ($PSVersionTable.Platform -eq "Win32NT" -or !$PSVersionTable.Platform) {
+        if ($PSVersionTable.PSEdition -eq "Core") {
+            Invoke-WinCommand -ComputerName localhost -ScriptBlock {
+                $null = Clear-DnsClientCache
+            }
+        }
+        else {
+            $null = Clear-DnsClientCache
+        }
+    }
+    else {
+        Write-Verbose "Flushing the DNS Client Cache is generally not needed on Linux since the default (for most distros) is not to cache anything."
+    }
+    
     foreach ($HName in $InitialRemoteHostListPrep) {
         try {
             $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
@@ -1821,7 +1835,7 @@ function Get-PUDAdminCenter {
         $PUDRSSyncHT = $global:PUDRSSyncHT
     
         # Define some Cache: variables that we'll be using in a lot of different contexts
-        $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenterPrototype).Invoke({$FunctionsForSBUse})
+        $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenter).Invoke({$FunctionsForSBUse})
     
         $Cache:DynamicPages = $DynamicPages = @(
             "PSRemotingCreds"
@@ -1887,7 +1901,7 @@ function Get-PUDAdminCenter {
                     $Session:ScanNetwork = $True
                     Sync-UDElement -Id "ScanNetwork"
     
-                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP).Name
+                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
                     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
                     # the user to specify individual/range of hosts/devices that they want to manage.
                     #$ScanRemoteHostListPrep = $ScanRemoteHostListPrep[0..20]
@@ -2433,8 +2447,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBWCLhHwr47up/syJN3E964aS
-# mVWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0w4+0zAltB2uO2XLPiuDjoub
+# w+Cgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2491,11 +2505,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMXo3lFbdN3DVmcH
-# xBDJ7zhgDKyLMA0GCSqGSIb3DQEBAQUABIIBAIYo3s2kwrXcJ9AaanLORC7NiDmq
-# IqTagMHerBZfMo3uYJyA0lSCmaQodUhJ8HoNmv2q0GfCoef7l9KSH2AY+QQDCY2T
-# Vya1rpmcdbdbbK9dcOR73XSTqpH2P+/VuUUw0UglAvquVXPtDrqsBzeoJaQy2gwQ
-# btqP7IIWJ2igr6LpYPjla0nAupZcqq73Jz+S9dItmYyXWMDzAAAPwrf38PzdRHFc
-# 4cx7nZGe/Sg/eTNhshIguJEr04iTFb7QwwE+NZ0kSR0njUe1fqdEa3zPButHQW9a
-# VQyCW/zBBfDvJqelKBzeYswYzeXxsG56ds1XhIXiX8VIjIDD/MSauIOfwU8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG96MsHo/PnwrggG
+# ZLXy488uL/byMA0GCSqGSIb3DQEBAQUABIIBAJc+Z2liE0a7J5rjMamBqB8kEcvT
+# UG9uVeHu6RtVAQ76zi04CQrBXwMdf/VQb4n/D/L0O6065E8WIGChxQ/8mZlUEMmK
+# GboQc5kAwe1mMqKntYN0fQ5lQZypQxiMIrmbA4wzBVSqS/4sckibHzieQKl3hztB
+# rgLOUTcxxhIyAQ+Nkmg6PGOvD5Q1XWblXTehPy0834rDiGZreWCtKitMVfmaWoUW
+# 4/1cQVpQn3rrDkeGWfpMCSfCIYqC5t+7TwLMYG76A6POzH2kceovpb9ssf0WjPz7
+# XJrzg/UJixyRDdfNekQ3RrWfuYn4FNEqhMxJBfLpssALb6RCFsUsAnevl3Y=
 # SIG # End signature block

@@ -4,7 +4,7 @@ $HomePageContent = {
     $PUDRSSyncHT = $global:PUDRSSyncHT
 
     # Define some Cache: variables that we'll be using in a lot of different contexts
-    $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenterPrototype).Invoke({$FunctionsForSBUse})
+    $Cache:ThisModuleFunctionsStringArray = $ThisModuleFunctionsStringArray = $(Get-Module PUDAdminCenter).Invoke({$FunctionsForSBUse})
 
     $Cache:DynamicPages = $DynamicPages = @(
         "PSRemotingCreds"
@@ -70,7 +70,7 @@ $HomePageContent = {
                 $Session:ScanNetwork = $True
                 Sync-UDElement -Id "ScanNetwork"
 
-                [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP).Name
+                [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
                 # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
                 # the user to specify individual/range of hosts/devices that they want to manage.
                 #$ScanRemoteHostListPrep = $ScanRemoteHostListPrep[0..20]
