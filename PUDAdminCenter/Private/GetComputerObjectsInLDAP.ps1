@@ -2,15 +2,107 @@ function GetComputerObjectsInLDAP {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$False)]
-        [int]$ObjectCount = 0
+        [int]$ObjectCount = 0,
+
+        [Parameter(Mandatory=$False)]
+        [string]$Domain,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$LDAPCreds
     )
+
+    if ($PSVersionTable.Platform -eq "Unix" -and !$LDAPCreds) {
+        Write-Error "On this Platform (i.e. $($PSVersionTable.Platform)), you must provide credentials with access to LDAP/Active Directory using the -LDAPCreds parameter! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    # Make sure the $LDAPCreds.UserName is in the correct format
+    if ($LDAPCreds.UserName -notmatch "\\") {
+        Write-Error "The -LDAPCreds UserName is NOT in the correct format! The format must be: <Domain>\<User>"
+        $global:FunctionResult = "1"
+        return
+    }
+
+     # Determine if we have the required Linux commands
+     [System.Collections.ArrayList]$LinuxCommands = @(
+        "host"
+        "hostname"
+        "ldapsearch"
+    )
+    if (!$Domain) {
+        $null = $LinuxCommands.Add("domainname")
+    }
+    [System.Collections.ArrayList]$CommandsNotPresent = @()
+    foreach ($CommandName in $LinuxCommands) {
+        $CommandCheckResult = command -v $CommandName
+        if (!$CommandCheckResult) {
+            $null = $CommandsNotPresent.Add($CommandName)
+        }
+    }
+
+    if ($CommandsNotPresent.Count -eq 1 -and $CommandsNotPresent -contains "ldapsearch") {
+        $PackageManagerList = @('pacman','dnf','yum','apt','zypper')
+        
+        if ($(command -v pacman)) {
+            $null = pacman -S openldap-clients --noconfirm
+        }
+
+        if ($(command -v yum)) {
+            $null = yum -y install openldap-clients
+        }
+        elseif ($(command -v dnf)) {
+            $null = dnf -y install openldap-clients
+        }
+
+        if ($(command -v apt)) {
+            $null = apt -y install openldap-clients
+        }
+
+        if ($(command -v zypper)) {
+            $null = zypper install openldap-clients --non-interactive
+        }
+
+        $ldapsearchCheckResult = command -v 'ldapsearch'
+        if (!$ldapsearchCheckResult) {
+            Write-Error "Unable to find the 'ldapsearch' command post-install! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    
+    [System.Collections.ArrayList]$CommandsNotPresent = @()
+    foreach ($CommandName in $LinuxCommands) {
+        $CommandCheckResult = command -v $CommandName
+        if (!$CommandCheckResult) {
+            $null = $CommandsNotPresent.Add($CommandName)
+        }
+    }
+    if ($CommandsNotPresent.Count -gt 0) {
+        Write-Error "The following Linux commands are required, but not present on $(hostname):`n$($CommandsNotPresent -join "`n")`nHalting!"
+        $global:FunctionResult = "1"
+        return
+    }
 
     # Below $LDAPInfo Output is PSCustomObject with properties: DirectoryEntryInfo, LDAPBaseUri,
     # GlobalCatalogConfigured3268, GlobalCatalogConfiguredForSSL3269, Configured389, ConfiguredForSSL636,
     # PortsThatWork
     try {
-        $DomainControllerInfo = GetDomainController -ErrorAction Stop
-        $LDAPInfo = TestLDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
+        if ($Domain) {
+            $DomainControllerInfo = GetDomainController -Domain $Domain -ErrorAction Stop
+        }
+        else {
+            $DomainControllerInfo = GetDomainController -ErrorAction Stop
+        }
+
+        if ($DomainControllerInfo.PrimaryDomainController -eq "unknown") {
+            $PDC = $DomainControllerInfo.FoundDomainControllers[0]
+        }
+        else {
+            $PDC = $DomainControllerInfo.PrimaryDomainController
+        }
+
+        $LDAPInfo = TestLDAP -ADServerHostNameOrIP $PDC -ErrorAction Stop
         if (!$DomainControllerInfo) {throw "Problem with GetDomainController function! Halting!"}
         if (!$LDAPInfo) {throw "Problem with TestLDAP function! Halting!"}
     }
@@ -21,44 +113,80 @@ function GetComputerObjectsInLDAP {
     }
 
     if (!$LDAPInfo.PortsThatWork) {
-        Write-Error "Unable to access LDAP on $($DomainControllerInfo.PrimaryDomainController)! Halting!"
+        Write-Error "Unable to access LDAP on $PDC! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
     if ($LDAPInfo.PortsThatWork -contains "389") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":389"
+        $Port = "389"
+        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":$Port"
     }
     elseif ($LDAPInfo.PortsThatWork -contains "3268") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3268"
+        $Port = "3268"
+        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":$Port"
     }
     elseif ($LDAPInfo.PortsThatWork -contains "636") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":636"
+        $Port = "636"
+        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":$Port"
     }
     elseif ($LDAPInfo.PortsThatWork -contains "3269") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3269"
+        $Port = "3269"
+        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":$Port"
     }
 
-    <#
-    $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
-    $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-    $LDAPSearcher.Filter = "(&(objectCategory=Group))"
-    $LDAPSearcher.SizeLimit = 0
-    $LDAPSearcher.PageSize = 250
-    $GroupObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
-    #>
+    if ($PSVersionTable.Platform -eq "Unix") {
+        $SimpleDomainPrep = $PDC -split "\."
+        $SimpleDomain = $SimpleDomainPrep[1..$($SimpleDomainPrep.Count-1)] -join "."
+        [System.Collections.ArrayList]$DomainLDAPContainersPrep = @()
+        foreach ($Section in $($SimpleDomain -split "\.")) {
+            $null = $DomainLDAPContainersPrep.Add($Section)
+        }
+        $DomainLDAPContainers = $($DomainLDAPContainersPrep | foreach {"DC=$_"}) -join ","
+        $BindUserName = $LDAPCreds.UserName
+        $BindPassword = $LDAPCreds.GetNetworkCredential().Password
 
-    $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
-    $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-    $LDAPSearcher.Filter = "(objectClass=computer)"
-    $LDAPSearcher.SizeLimit = $ObjectCount
-    $LDAPSearcher.PageSize = 250
-    $ComputerObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
-    <#
-    $null = $LDAPSearcher.PropertiesToLoad.Add("name")
-    [System.Collections.ArrayList]$ServerList = $($LDAPSearcher.FindAll().Properties.GetEnumerator()).name
-    $null = $ServerList.Insert(0,"Please Select a Server")
-    #>
+        $ldapSearchOutput = ldapsearch -x -h $PDC -D $BindUserName -w $BindPassword -b $DomainLDAPContainers -s sub "(objectClass=computer)" cn
+        if ($LASTEXITCODE -ne 0) {
+            if ($LASTEXITCODE -eq 49) {
+                Write-Error "Invalid credentials. Please check them and try again. Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+            else {
+                Write-Error "Unable to read LDAP! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        $ComputerObjectsInLDAP = $($ldapSearchOutput -split "`n") -match "cn: "
+        if ($ObjectCount -gt 0) {
+            $ComputerObjectsInLDAP = $ComputerObjectsInLDAP[0..$($ObjectCount-1)]
+        }
+    }
+    else {
+        <#
+        $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
+        $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
+        $LDAPSearcher.Filter = "(&(objectCategory=Group))"
+        $LDAPSearcher.SizeLimit = 0
+        $LDAPSearcher.PageSize = 250
+        $GroupObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
+        #>
+
+        $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
+        $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
+        $LDAPSearcher.Filter = "(objectClass=computer)"
+        $LDAPSearcher.SizeLimit = $ObjectCount
+        $LDAPSearcher.PageSize = 250
+        $ComputerObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
+        <#
+        $null = $LDAPSearcher.PropertiesToLoad.Add("name")
+        [System.Collections.ArrayList]$ServerList = $($LDAPSearcher.FindAll().Properties.GetEnumerator()).name
+        $null = $ServerList.Insert(0,"Please Select a Server")
+        #>
+    }
 
     $ComputerObjectsInLDAP
 }
@@ -66,8 +194,8 @@ function GetComputerObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4RdFsbA4GOnkC4AOHHVdXqNm
-# dK6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkgXSJt1SdBFOvByBh63DzPZ1
+# k0qgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -124,11 +252,11 @@ function GetComputerObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFALnShLMJCSt+SFE
-# 403hvQGvN3iOMA0GCSqGSIb3DQEBAQUABIIBAHiZvYLTcDZlj0R3Qv+Ck3YnYQlJ
-# s9FyBLK/9EB9PlJqeagPqyi0ZlQn7inmL/DHLUiPi9htbNZ2hnmhZg2a8YpIl7iv
-# /OTTq9+d98K1yTavy6vMoYLQcPsQgdEGMPFCu0rb0kryDCZyEZE6Ew0KIM1PqmnE
-# 1qtexDtgqB4ki8WDgoco13UAtlLdK0UW152y5c4l8JFoGvnUbeiIYohoiEhtlgFP
-# p4wsqT1BMzGUIVpn0H603WXQkWlxPWBgCp/BLzMrT6UYwObjHJnhRb7cRMlwPXGD
-# Ph0t88m7XdsTqma79ubtAlrT93yUcIT6h8XkWYhp2BysQBwJjuycGoDtLks=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGSePC6IKfa3s2QT
+# tACIqvZDvZ13MA0GCSqGSIb3DQEBAQUABIIBACiBv3hDljONjOYMaAZx4dd8ePYl
+# bU40AHYpASniZMA+ub3jLnLQYnq+XlDw8TpglFWKVxaa1lEJq41XiiW6nLsLYpSX
+# oQ3Ely6DDj19MnLAqTSGplQtVl9cyNexNTft4E/t+Wtm7CoEpOV1YW693TmWErO5
+# JH3syVIuX49FLswCfU4FrT+uqXvmSwS7Mfo53UHfA28Oc4Z+KxvNHFu7qMmIB2rP
+# A7nbHFnMsMU1VfLliVL1JbvCuuiX3Ntv6x4RB1eOT4iKyKkLKIP2SnXNTS8DjeWZ
+# bMA138W0bRpIYOrw23o9Efmt+iyz0JDqF1pXaiWy1nH3ztO+Wg8my2g8Zwo=
 # SIG # End signature block

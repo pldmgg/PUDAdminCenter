@@ -67,6 +67,435 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
 # Public Functions
 
 
+function Download-NuGetPackage {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$True)]
+        [string]$AssemblyName,
+
+        [Parameter(Mandatory=$False)]
+        [string]$NuGetPkgDownloadDirectory,
+
+        [Parameter(Mandatory=$False)]
+        [switch]$AllowPreRelease,
+
+        [Parameter(Mandatory=$False)]
+        [switch]$Silent
+    )
+
+    ##### BEGIN Helper Native Functions #####
+    
+    function Get-NativePath {
+        [CmdletBinding()]
+        Param( 
+            [Parameter(Mandatory=$True)]
+            [string[]]$PathAsStringArray
+        )
+    
+        $PathAsStringArray = foreach ($pathPart in $PathAsStringArray) {
+            $SplitAttempt = $pathPart -split [regex]::Escape([IO.Path]::DirectorySeparatorChar)
+            
+            if ($SplitAttempt.Count -gt 1) {
+                foreach ($obj in $SplitAttempt) {
+                    $obj
+                }
+            }
+            else {
+                $pathPart
+            }
+        }
+        $PathAsStringArray = $PathAsStringArray -join [IO.Path]::DirectorySeparatorChar
+    
+        $PathAsStringArray
+    
+    }
+    
+    ##### END Helper Native Functions #####
+
+    ##### BEGIN Parameter Validation #####
+
+    if ($PSVersionTable.Platform -ne $null -and $PSVersionTable.Platform -ne "Win32NT" -and !$NuGetPkgDownloadDirectory) {
+        Write-Error "On this OS Platform (i.e. $($PSVersionTable.Platform)), the -NuGetPkgDownloadDirectory parameter is required! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    <#
+    if ($PSVersionTable.PSEdition -eq "Desktop" -and $NuGetPkgDownloadDirectory) {
+        Write-Error "The -NuGetPkgDownloadPath parameter is only meant to be used with PowerShell Core! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    #>
+    
+    ##### END Parameter Validation #####
+
+
+    ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
+
+    $s = [IO.Path]::DirectorySeparatorChar
+
+    if ($($PSVersionTable.Platform -ne $null -and $PSVersionTable.Platform -ne "Win32NT") -or $NuGetPkgDownloadDirectory) {
+        #$NuGetPackageUri = "https://www.nuget.org/api/v2/package/$AssemblyName"
+        #$NuGetPackageUri = "https://api.nuget.org/v3-flatcontainer/{id-lower}/{version-lower}/{id-lower}.{version-lower}.nupkg"
+        if ($AllowPreRelease) {
+            $SearchNuGetPackageUri = "https://api-v2v3search-0.nuget.org/query?q=$AssemblyName&prerelease=true"
+        }
+        else {
+            $SearchNuGetPackageUri = "https://api-v2v3search-0.nuget.org/query?q=$AssemblyName&prerelease=false"
+        }
+        $VersionCheckPrep = $($(Invoke-RestMethod -Uri $SearchNuGetPackageUri).data | Where-Object {$_.id -eq $AssemblyName}).versions
+        $LatestVersion = $VersionCheckPrep[-1].Version
+        $LowercaseAssemblyName = $AssemblyName.ToLowerInvariant()
+        $NuGetPackageUri = "https://api.nuget.org/v3-flatcontainer/$LowercaseAssemblyName/$LatestVersion/$LowercaseAssemblyName.$LatestVersion.nupkg"
+
+        $OutFileBaseName = "$LowercaseAssemblyName.$LatestVersion.zip"
+        $DllFileName = $OutFileBaseName -replace "zip","dll"
+
+        if ($NuGetPkgDownloadDirectory) {
+            $NuGetPkgDownloadPath = Join-Path $NuGetPkgDownloadDirectory $OutFileBaseName
+            $NuGetPkgExtractionDirectory = Join-Path $NuGetPkgDownloadDirectory $AssemblyName
+            if (!$(Test-Path $NuGetPkgDownloadDirectory)) {
+                $null = New-Item -ItemType Directory -Path $NuGetPkgDownloadDirectory -Force
+            }
+            if (!$(Test-Path $NuGetPkgExtractionDirectory)) {
+                $null = New-Item -ItemType Directory -Path $NuGetPkgExtractionDirectory -Force
+            }
+        }
+
+        <#
+        $TestPath = $NuGetPkgDownloadDirectory
+        $BrokenDir = while (-not (Test-Path $TestPath)) {
+            $CurrentPath = $TestPath
+            $TestPath = Split-Path $TestPath
+            if (Test-Path $TestPath) {$CurrentPath}
+        }
+
+        if ([String]::IsNullOrWhitespace([System.IO.Path]::GetExtension($NuGetPkgDownloadDirectory))) {
+            # Assume it's a directory
+            if ($BrokenDir) {
+                if ($BrokenDir -eq $NuGetPkgDownloadDirectory) {
+                    $null = New-Item -ItemType Directory -Path $BrokenDir -Force
+                }
+                else {
+                    Write-Error "The path $TestPath was not found! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+
+                $NuGetPkgDownloadPath = Get-NativePath @($BrokenDir, $OutFileBaseName)
+            }
+            else {
+                if ($(Get-ChildItem $NuGetPkgDownloadDirectory).Count -ne 0) {
+                    $NewDir = Get-NativePath @($NuGetPkgDownloadDirectory, [System.IO.Path]::GetFileNameWithoutExtension($OutFileBaseName))
+                    $null = New-Item -ItemType Directory -Path $NewDir -Force
+                }
+                $NuGetPkgDownloadPath = Get-NativePath @($NewDir, $OutFileBaseName)
+            }
+        }
+        else {
+            # Assume it's a file
+            $OutFileBaseName = $NuGetPkgDownloadDirectory | Split-Path -Leaf
+            $extension = [System.IO.Path]::GetExtension($OutFileBaseName)
+            if ($extension -ne ".zip") {
+                $OutFileBaseName = $OutFileBaseName -replace "$extension",".zip"
+            }
+
+            if ($BrokenDir) {
+                Write-Host "BrokenDir is $BrokenDir"
+                if ($BrokenDir -eq $($NuGetPkgDownloadDirectory | Split-Path -Parent)) {
+                    $null = New-Item -ItemType Directory -Path $BrokenDir -Force
+                }
+                else {
+                    Write-Error "The path $TestPath was not found! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+
+                $NuGetPkgDownloadPath = Get-NativePath @($BrokenDir, $OutFileBaseName)
+            }
+            else {
+                if ($(Get-ChildItem $($NuGetPkgDownloadDirectory | Split-Path -Parent)).Count -ne 0) {
+                    $NewDir = Get-NativePath @($($NuGetPkgDownloadDirectory | Split-Path -Parent), [System.IO.Path]::GetFileNameWithoutExtension($OutFileBaseName))
+                    $null = New-Item -ItemType Directory -Path $NewDir -Force
+                }
+                
+                $NuGetPkgDownloadPath = Get-NativePath @($NewDir, $OutFileBaseName)
+            }
+        }
+        #>
+
+        #$NuGetPkgExtractionDirectory = $NuGetPkgDownloadPath | Split-Path -Parent
+    }
+    if ($($PSVersionTable.PSEdition -eq "Desktop" -or $PSVersionTable.Platform -eq "Win32NT") -and !$NuGetPkgDownloadDirectory) {
+        $NuGetConfigContent = Get-Content $(Get-NativePath @($env:AppData, "NuGet", "nuget.config"))
+        $NuGetRepoPathCheck = $NuGetConfigContent | Select-String -Pattern '<add key="repositoryPath" value=' -ErrorAction SilentlyContinue
+        if ($NuGetRepoPathCheck -ne $null) {
+            $NuGetPackagesPath = $($($NuGetRepoPathCheck.Line.Trim() -split 'value=')[-1] -split ' ')[0] -replace '"',''
+        }
+        else {
+            $NuGetPackagesPath = Get-NativePath @($HOME, ".nuget", "packages")
+        }
+
+        if (!$(Test-Path $NuGetPackagesPath)) {
+            $null = New-Item -ItemType Directory -Path $NuGetPackagesPath -Force
+        }
+
+        $NuGetPkgExtractionDirectory = Get-NativePath @($NuGetPackagesPath, $AssemblyName)
+    }
+
+    if ($PSVersionTable.PSEdition -eq "Core") {
+        $PossibleSubDirs = @(
+            [pscustomobject]@{
+                Preference      = 3
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.3"))
+            }
+            [pscustomobject]@{
+                Preference      = 3
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.6"))
+            }
+            [pscustomobject]@{
+                Preference      = 1
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard2.0"))
+            }
+            [pscustomobject]@{
+                Preference      = 2
+                SubDirectory    = $(Get-NativePath @("lib", "netcoreapp2.0"))
+            }
+        )
+    }
+    else {
+        $PossibleSubDirs = @(
+            [pscustomobject]@{
+                Preference      = 8
+                SubDirectory    = $(Get-NativePath @("lib", "net40"))
+            }
+            [pscustomobject]@{
+                Preference      = 7
+                SubDirectory    = $(Get-NativePath @("lib", "net45"))
+            }
+            [pscustomobject]@{
+                Preference      = 6
+                SubDirectory    = $(Get-NativePath @("lib", "net451"))
+            }
+            [pscustomobject]@{
+                Preference      = 5
+                SubDirectory    = $(Get-NativePath @("lib", "net46"))
+            }
+            [pscustomobject]@{
+                Preference      = 4
+                SubDirectory    = $(Get-NativePath @("lib", "net461"))
+            }
+            [pscustomobject]@{
+                Preference      = 3
+                SubDirectory    = $(Get-NativePath @("lib", "net462"))
+            }
+            [pscustomobject]@{
+                Preference      = 2
+                SubDirectory    = $(Get-NativePath @("lib", "net47"))
+            }
+            [pscustomobject]@{
+                Preference      = 1
+                SubDirectory    = $(Get-NativePath @("lib", "net471"))
+            }
+            [pscustomobject]@{
+                Preference      = 15
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.0"))
+            }
+            [pscustomobject]@{
+                Preference      = 14
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.1"))
+            }
+            [pscustomobject]@{
+                Preference      = 13
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.2"))
+            }
+            [pscustomobject]@{
+                Preference      = 12
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.3"))
+            }
+            [pscustomobject]@{
+                Preference      = 11
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.4"))
+            }
+            [pscustomobject]@{
+                Preference      = 10
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.5"))
+            }
+            [pscustomobject]@{
+                Preference      = 9
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard1.6"))
+            }
+            [pscustomobject]@{
+                Preference      = 16
+                SubDirectory    = $(Get-NativePath @("lib", "netstandard2.0"))
+            }
+            [pscustomobject]@{
+                Preference      = 17
+                SubDirectory    = $(Get-NativePath @("lib", "netcoreapp2.0"))
+            }
+        )
+    }
+
+    ##### END Variable/Parameter Transforms and PreRun Prep #####
+
+    
+    ##### BEGIN Main Body #####
+    if ($($PSVersionTable.PSEdition -eq "Desktop" -or $PSVersionTable.Platform -eq "Win32NT") -and !$NuGetPkgDownloadDirectory) {
+        #$null = Update-PackageManagement -InstallNuGetCmdLine
+
+        if (!$(Get-Command nuget.exe -ErrorAction SilentlyContinue)) {
+            $NugetPath = Join-Path $($NuGetPackagesPath | Split-Path -Parent) nuget.exe
+            if(!$(Test-Path $NugetPath)) {
+                Invoke-WebRequest -uri 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $NugetPath
+            }
+            $NugetDir = $NugetPath | Split-Path -Parent
+
+            # Update PowerShell $env:Path
+            [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+            if ($CurrentEnvPathArray -notcontains $NugetDir) {
+                $CurrentEnvPathArray.Insert(0,$NugetDir)
+                $env:Path = $CurrentEnvPathArray -join ';'
+            }
+            
+            # Update SYSTEM Path
+            $RegistrySystemPath = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
+            $CurrentSystemPath = $(Get-ItemProperty -Path $RegistrySystemPath -Name PATH).Path
+            [System.Collections.Arraylist][array]$CurrentSystemPathArray = $CurrentSystemPath -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+            if ($CurrentSystemPathArray -notcontains $NugetDir) {
+                $CurrentSystemPathArray.Insert(0,$NugetDir)
+                $UpdatedSystemPath = $CurrentSystemPathArray -join ';'
+                Set-ItemProperty -Path $RegistrySystemPath -Name PATH -Value $UpdatedSystemPath
+            }   
+        }
+
+        try {
+            $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+            #$ProcessInfo.WorkingDirectory = $NuGetPackagesPath
+            $ProcessInfo.FileName = $(Get-Command nuget).Source
+            $ProcessInfo.RedirectStandardError = $true
+            $ProcessInfo.RedirectStandardOutput = $true
+            $ProcessInfo.UseShellExecute = $false
+            if ($AllowPreRelease) {
+                $ProcessInfo.Arguments = "install $AssemblyName -PreRelease"
+            }
+            else {
+                $ProcessInfo.Arguments = "install $AssemblyName"
+            }
+            $Process = New-Object System.Diagnostics.Process
+            $Process.StartInfo = $ProcessInfo
+            $Process.Start() | Out-Null
+            $stdout = $($Process.StandardOutput.ReadToEnd()).Trim()
+            $stderr = $($Process.StandardError.ReadToEnd()).Trim()
+            $AllOutput = $stdout + $stderr
+            $AllOutput = $AllOutput -split "`n"
+
+            if ($stderr -match "Unable to find package") {
+                throw
+            }
+
+            $NuGetPkgExtractionDirectory = $(Get-ChildItem -Path $NuGetPackagesPath -Directory | Where-Object {$_.Name -eq $AssemblyName} | Sort-Object -Property CreationTime)[-1].FullName
+        }
+        catch {
+            Write-Error $_
+            Write-Error "NuGet.exe was unable to find a package called $AssemblyName! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if ($($PSVersionTable.Platform -ne $null -and $PSVersionTable.Platform -ne "Win32NT") -or $NuGetPkgDownloadDirectory) {
+        try {
+            # Download the NuGet Package
+            if (!$Silent) {
+                Write-Host "Downloading $AssemblyName NuGet Package to $NuGetPkgDownloadPath ..."
+            }
+            Invoke-WebRequest -Uri $NuGetPackageUri -OutFile $NuGetPkgDownloadPath
+            if (!$Silent) {
+                Write-Host "NuGet Package has been downloaded to $NuGetPkgDownloadPath"
+            }
+        }
+        catch {
+            Write-Error "Unable to find $AssemblyName via the NuGet API! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Step through possble Zip File SubDirs and get the most highest available compatible version of the Assembly
+        try {
+            if (!$Silent) {
+                Write-Host "Attempting to extract NuGet zip file $NuGetPkgDownloadPath to $NuGetPkgExtractionDirectory ..."
+            }
+            if ($(Get-ChildItem $NuGetPkgExtractionDirectory).Count -gt 1) {
+                foreach ($item in $(Get-ChildItem $NuGetPkgExtractionDirectory)) {
+                    if ($item.Extension -ne ".zip") {
+                        $item | Remove-Item -Recurse -Force
+                    }
+                }
+            }
+            Expand-Archive -Path $NuGetPkgDownloadPath -DestinationPath $NuGetPkgExtractionDirectory
+            #Unzip-File -PathToZip $NuGetPkgDownloadPath -TargetDir $NuGetPkgExtractionDirectory
+            if (!$Silent) {
+                Write-Host "NuGet Package is available here: $NuGetPkgExtractionDirectory"
+            }
+        }
+        catch {
+            Write-Warning "The Unzip-File function failed with the following error:"
+            Write-Error $$_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    [System.Collections.ArrayList]$NuGetPackageActualSubDirs = @()
+    $(Get-ChildItem -Recurse $NuGetPkgExtractionDirectory -File -Filter "*.dll").DirectoryName | foreach {
+        $null = $NuGetPackageActualSubDirs.Add($_)
+    }
+    
+    [System.Collections.ArrayList]$FoundSubDirsPSObjects = @()
+    foreach ($pdir in $PossibleSubDirs) {
+        foreach ($adir in $NuGetPackageActualSubDirs) {
+            $IndexOfSlash = $pdir.SubDirectory.IndexOf($s)
+            $pdirToRegexPattern = {
+                $UpdatedString = $pdir.SubDirectory.Remove($IndexOfSlash, 1)
+                $UpdatedString.Insert($IndexOfSlash, [regex]::Escape($s))
+            }.Invoke()
+
+            if ($adir -match $pdirToRegexPattern) {
+                $FoundDirPSObj = [pscustomobject]@{
+                    Preference   = $pdir.Preference
+                    Directory    = $adir
+                }
+                $null = $FoundSubDirsPSObjects.Add($FoundDirPSObj)
+            }
+        }
+    }
+
+    $TargetDir = $($FoundSubDirsPSObjects | Sort-Object -Property Preference)[0].Directory
+    $AssemblyPath = Get-NativePath @($TargetDir, $(Get-ChildItem $TargetDir -File -Filter "*.dll").Name)
+    
+    [pscustomobject]@{
+        NuGetPackageDirectory   = $NuGetPkgExtractionDirectory
+        AssemblyToLoad          = $AssemblyPath
+    }
+    
+
+    <#
+    $CurrentLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+    $CheckAssemblyIsLoaded = $CurrentLoadedAssemblies | Where-Object {$_.FullName -like "$AssemblyName*"}
+    if ($CheckAssemblyIsLoaded -eq $null) {
+        Add-Type -Path $AssemblyPath
+    }
+    else {
+        Write-Warning "The Assembly $AssemblyName is already loaded!"
+    }
+    #>
+
+    
+    ##### END Main Body #####
+
+}
+
+
 <#
     
     .SYNOPSIS
@@ -2193,6 +2622,22 @@ function Get-PUDAdminCenter {
         "Updates"
     )
 
+    if ($PSVersionTable.Platform -eq "Unix") {
+        $RequiredLinuxCommands =  $(Get-Module PUDAdminCenter).Invoke({$RequiredLinuxCommands})
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $RequiredLinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    }
+    if ($CommandsNotPresent.Count -gt 0) {
+        Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     # Make sure we can resolve the $DomainName
     try {
         $DomainName = $(Get-CimInstance Win32_ComputerSystem).Domain
@@ -2252,8 +2697,11 @@ function Get-PUDAdminCenter {
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
     #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
-    if ($PSVersionTable.PSEdition -eq "Core") {
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Win32NT") {
         [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$_ -replace "CN=",""}
+    }
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Unix") {
+        [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$($_ -replace "cn: ","").Trim()}
     }
 
     # Filter Out the Remote Hosts that we can't resolve
@@ -4359,7 +4807,7 @@ function Get-PUDAdminCenter {
                                     [System.Net.WebResponse]$Response = $Request.GetResponse()
                                 }
                                 catch {
-                                    if ($_.Exception.Message -match "The remote server returned an error: \(405\) Method Not Allowed") {
+                                    if ($_.Exception.Message -match "The remote server returned an error: \(405\)") {
                                         if ($WSManUrl -match "5985") {
                                             $WSMan5985Available = $True
                                         }
@@ -7130,6 +7578,30 @@ function Stop-DiskPerf {
 
 
 
+if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "Core") {
+    if (![bool]$(Get-Module -ListAvailable WindowsCompatibility)) {
+        try {
+            Install-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if (![bool]$(Get-Module WindowsCompatibility)) {
+        try {
+            Import-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+}
+
 # Can't just install and import UniversalDashboard.Community automatically because of interactive license agreement prompt. So, it must be done
 # manually before trying to import PUDAdminCenter.
 if (![bool]$(Get-Module -ListAvailable UniversalDashboard.Community)) {
@@ -7214,6 +7686,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:TestPort}.Ast.Extent.Text
     ${Function:TestSSH}.Ast.Extent.Text
     ${Function:UnzipFile}.Ast.Extent.Text
+    ${Function:Download-NuGetPackage}.Ast.Extent.Text
     ${Function:Get-CertificateOverview}.Ast.Extent.Text
     ${Function:Get-Certificates}.Ast.Extent.Text
     ${Function:Get-CimPnpEntity}.Ast.Extent.Text
@@ -7250,11 +7723,17 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:Stop-DiskPerf}.Ast.Extent.Text
 )
 
+$RequiredLinuxCommands = @(
+    "domainname"
+    "whoami"
+    "nslookup"
+)
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUu044KJRM6J2XtfeG6Rff8FxW
-# hkSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU980PiCqAzV6xIOBJ6V7OAlH8
+# O2Cgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -7311,11 +7790,11 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMV33YM+SFfMeyvU
-# I9Kimv8ZZxwkMA0GCSqGSIb3DQEBAQUABIIBAHDR+VPZabuqOYHOLT/RzKs974vU
-# sQa3vamUCoddUzXrix44T6JzzucKxPrxGPhmpG+i/W5moJnbuBT7aCaKNvIq+TIU
-# J/Lg/5LbbkqAlO9g+mj0ob8gvyTj2NJuHKFKXsenzdkaPKfQ4A1h6+HHHLdMlHpu
-# 0kvq8mExDBfpcFwhvp9idkAffA8odUU2aSmBfY9EsCs5fknQ71uOrWqo8Uoqaxgj
-# PklwpoPu52jeN6HHkMCbDhq+I0WPlm4LJUfn4WxBdOzBB+Ak2f2kdvUYyKMWf/kq
-# ju479WAiCEvr3pY1Ajca3Ec8wUhmAtIWXriSfpuIg4C4oISHz1hg7zLZWqU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPVOQ80g9TICLOIf
+# g1/JnCYx8bOxMA0GCSqGSIb3DQEBAQUABIIBAFe8mvoNsBJh9+N4vum22aNrfQtV
+# cv3ubhJUv+iK99XPvi0EZWegO6LrVxPEBo1+188MgaA+HChXze5EiiooZY1QvwjZ
+# s5sb2S03jpbu9QV3MwjLOSoQkx3ePVkxm0qDlr/I8vDDhIreWjSI7GE8nVZSN3VU
+# Esd1hOCaunNi6Ltf7T+K5Ex01m5O3aUYB1GFGbpz0Ca9ZUPpV/pi2b2sF6PpUhWv
+# ZkkocX6x35iDWzKwjzfxUpYXCrNQo/Ji6zXeugKhYhjI6bJm5M6GbmHEbZKvYz1W
+# UcdysvfhhqgTvYLEVYB1MompLEEmjNPYfauuzdTFQM8BjDWzGgmh6fN+YWA=
 # SIG # End signature block

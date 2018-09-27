@@ -94,6 +94,22 @@ function Get-PUDAdminCenter {
         "Updates"
     )
 
+    if ($PSVersionTable.Platform -eq "Unix") {
+        $RequiredLinuxCommands =  $(Get-Module PUDAdminCenter).Invoke({$RequiredLinuxCommands})
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $RequiredLinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    }
+    if ($CommandsNotPresent.Count -gt 0) {
+        Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     # Make sure we can resolve the $DomainName
     try {
         $DomainName = $(Get-CimInstance Win32_ComputerSystem).Domain
@@ -153,8 +169,11 @@ function Get-PUDAdminCenter {
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
     #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
-    if ($PSVersionTable.PSEdition -eq "Core") {
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Win32NT") {
         [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$_ -replace "CN=",""}
+    }
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Unix") {
+        [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$($_ -replace "cn: ","").Trim()}
     }
 
     # Filter Out the Remote Hosts that we can't resolve
@@ -2260,7 +2279,7 @@ function Get-PUDAdminCenter {
                                     [System.Net.WebResponse]$Response = $Request.GetResponse()
                                 }
                                 catch {
-                                    if ($_.Exception.Message -match "The remote server returned an error: \(405\) Method Not Allowed") {
+                                    if ($_.Exception.Message -match "The remote server returned an error: \(405\)") {
                                         if ($WSManUrl -match "5985") {
                                             $WSMan5985Available = $True
                                         }
@@ -2447,8 +2466,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0w4+0zAltB2uO2XLPiuDjoub
-# w+Cgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjf+zJOmSr8icX0gx58+Nk7+L
+# DLqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2505,11 +2524,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG96MsHo/PnwrggG
-# ZLXy488uL/byMA0GCSqGSIb3DQEBAQUABIIBAJc+Z2liE0a7J5rjMamBqB8kEcvT
-# UG9uVeHu6RtVAQ76zi04CQrBXwMdf/VQb4n/D/L0O6065E8WIGChxQ/8mZlUEMmK
-# GboQc5kAwe1mMqKntYN0fQ5lQZypQxiMIrmbA4wzBVSqS/4sckibHzieQKl3hztB
-# rgLOUTcxxhIyAQ+Nkmg6PGOvD5Q1XWblXTehPy0834rDiGZreWCtKitMVfmaWoUW
-# 4/1cQVpQn3rrDkeGWfpMCSfCIYqC5t+7TwLMYG76A6POzH2kceovpb9ssf0WjPz7
-# XJrzg/UJixyRDdfNekQ3RrWfuYn4FNEqhMxJBfLpssALb6RCFsUsAnevl3Y=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG7dPFQlb8l/C6Ii
+# 5QPIM68c6C8pMA0GCSqGSIb3DQEBAQUABIIBAMSsQfmhNLwR376wAq1/wN/uixKp
+# U8ojwGpFDGUNAF5hofdQZF6kK/lixo5rRr6cvLtCtWxEdF5yQ6ccpCmUx1/TcM+T
+# q2C1Xkxc2aw8OlzYaYtPRtr8VCXYVSxd27/FfqEhGnYgHDOSlClkeujn7J5oIsgu
+# /iB+94NF1QXD9fS+4iVgY5D4eXfNu9R7cXZNcxyF+7dBJp92neDJ3P6ehDFMAg31
+# BvG98hFz2y/UwHRn0Fr80xSv+2AZy1I9xU7bIS7riWkEie+OJyiw097xFaVW+isy
+# EDKnl4icGitCV1OtxvekK9vZm3aoWC5k819EOxrMp6Ze9kA5mFVOA5S+T/g=
 # SIG # End signature block

@@ -429,7 +429,7 @@ $HomePageContent = {
                                 [System.Net.WebResponse]$Response = $Request.GetResponse()
                             }
                             catch {
-                                if ($_.Exception.Message -match "The remote server returned an error: \(405\) Method Not Allowed") {
+                                if ($_.Exception.Message -match "The remote server returned an error: \(405\)") {
                                     if ($WSManUrl -match "5985") {
                                         $WSMan5985Available = $True
                                     }

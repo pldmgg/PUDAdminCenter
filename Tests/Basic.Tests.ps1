@@ -80,6 +80,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'TestSSH' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
         
+        $Commands -contains 'Download-NuGetPackage' | Should Be $True
         $Commands -contains 'Get-CertificateOverview' | Should Be $True
         $Commands -contains 'Get-Certificates' | Should Be $True
         $Commands -contains 'Get-CimPnpEntity' | Should Be $True
@@ -145,8 +146,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXx5JUJg42quBBCJAEmThUcgR
-# cWWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQD8tIotn7zi28gEApgibBtol
+# Jnegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -203,11 +204,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCbQUX2bov6cTwY2
-# AF0eDitrv2c0MA0GCSqGSIb3DQEBAQUABIIBAIBeJH6aVtsudMM5wjpbrb/M02Cq
-# 3/JlKYzC9A+5LU6CfKwy9JRkq66VQvPAH2RC8guA8vLyjzX5c8N7BdnypwwyB1KF
-# qgEteoil6hFcG2CBtH4OGcKLPcnDYr6WXqIqEUTN1WRHhC3exbdvQRKxoNCqkt2j
-# xEZ9wHOnsJorc04MgdZa79nd8WGSB9vaIxBTd/UZZEssYY5ZKQVCdT2KmN72yS2R
-# n1+anurlArFhsb8ItaBqlhaCbkl/IeZFRQYMotpoCcZVjUwGvtrmm3uZYPZabGq4
-# O2gBs5aKbnPtDkV+XuFS7Ht3yL7pT2oLEydMMOdS6nJ/fusVxzUmiYCrq7I=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDbtmWeetZImChye
+# bNIk3qYYxA4bMA0GCSqGSIb3DQEBAQUABIIBAIoRBIp9oIJvK6GxMdT3/nC+p/gO
+# bIcqgfwtJKc/PWsqdoAqLaRsXkMOvBb3HrzL0u2cLI9vk1hoNfGacdBeZrchLCxU
+# /pTkJBdRTp206cXdwo2qTwJTMR+IGir/ey0OihQvjFJS0yYF0vwD/EQ+pAZ3fdSj
+# sOqkS9RvY1pvmhuQNwEXIPJyVPiNpp3+8mnUn7ByJNc0Vmc1SsvNUGcqTXHztQT8
+# RCwwPgogmwKsDETbN83vynPS5H1LctrfQW7dL+IYWflxQAtWX1fWEjzSFyqrlh7F
+# ARkDMGIwvnRpa8jLYIpOs5jm6j6nDVdvFSRUhVouhP5D4C6ar5guOqJROAw=
 # SIG # End signature block

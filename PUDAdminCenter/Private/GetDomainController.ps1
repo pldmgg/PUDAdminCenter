@@ -49,81 +49,201 @@ function GetDomainController {
 
     ##### END Helper Functions #####
 
-
-    ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
-
-    $ComputerSystemCim = Get-CimInstance Win32_ComputerSystem
-    $PartOfDomain = $ComputerSystemCim.PartOfDomain
-
-    ##### END Variable/Parameter Transforms and PreRun Prep #####
-
-
-    ##### BEGIN Main Body #####
-
-    if (!$PartOfDomain -and !$Domain) {
-        Write-Error "$env:ComputerName is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-    
-    $ThisMachinesDomain = $ComputerSystemCim.Domain
-
-    # If we're in a PSSession, [system.directoryservices.activedirectory] won't work due to Double-Hop issue
-    # So just get the LogonServer if possible
-    if ($Host.Name -eq "ServerRemoteHost" -or $UseLogonServer) {
-        if (!$Domain -or $Domain -eq $ThisMachinesDomain) {
-            $Counter = 0
-            while ([string]::IsNullOrWhitespace($DomainControllerName) -or $Counter -le 20) {
-                $DomainControllerName = $(Get-CimInstance win32_ntdomain).DomainControllerName
-                if ([string]::IsNullOrWhitespace($DomainControllerName)) {
-                    Write-Warning "The win32_ntdomain CimInstance has a null value for the 'DomainControllerName' property! Trying again in 15 seconds (will try for 5 minutes total)..."
-                    Start-Sleep -Seconds 15
-                }
-                $Counter++
-            }
-
-            if ([string]::IsNullOrWhitespace($DomainControllerName)) {
-                $IPOfDNSServerWhichIsProbablyDC = $(Resolve-DNSName $ThisMachinesDomain).IPAddress
-                $DomainControllerFQDN = $(ResolveHost -HostNameOrIP $IPOfDNSServerWhichIsProbablyDC).FQDN
-            }
-            else {
-                $LogonServer = $($DomainControllerName | Where-Object {![string]::IsNullOrWhiteSpace($_)}).Replace('\\','').Trim()
-                $DomainControllerFQDN = $LogonServer + '.' + $RelevantSubCANetworkInfo.DomainName
-            }
-
-            [pscustomobject]@{
-                FoundDomainControllers      = [array]$DomainControllerFQDN
-                PrimaryDomainController     = $DomainControllerFQDN
-            }
-
-            return
+    if ($PSVersionTable.Platform -eq "Unix") {
+        # Determine if we have the required Linux commands
+        [System.Collections.ArrayList]$LinuxCommands = @(
+            "host"
+            "hostname"
+        )
+        if (!$Domain) {
+            $null = $LinuxCommands.Add("domainname")
         }
-        else {
-            Write-Error "Unable to determine Domain Controller(s) network location due to the Double-Hop Authentication issue! Halting!"
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $(hostname):`n$($CommandsNotPresent -join "`n")`nHalting!"
             $global:FunctionResult = "1"
             return
         }
+
+        $ThisHostNamePrep = hostname
+        $ThisHostName = $($ThisHostNamePrep -split "\.")[0]
+
+        if (!$Domain) {
+            $Domain = domainname
+            if (!$Domain -or $Domain -eq "(none)") {
+                $EtcHostsContent = Get-Content "/etc/hosts"
+                $EtcHostsContentsArray = $(foreach ($HostLine in $EtcHostsContent) {
+                    $HostLine -split "[\s]" | foreach {$_.Trim()}
+                }) | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+                $PotentialStringsWithDomainName = $EtcHostsContentsArray | Where-Object {
+                    $_ -notmatch "localhost" -and
+                    $_ -notmatch "localdomain" -and
+                    $_ -match "\." -and
+                    $_ -match "[a-zA-Z]"
+                } | Sort-Object | Get-Unique
+
+                if ($PotentialStringsWithDomainName.Count -eq 0) {
+                    Write-Error "Unable to determine domain for $(hostname)! Please use the -DomainName parameter and try again. Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+                
+                [System.Collections.ArrayList]$PotentialDomainsPrep = @()
+                foreach ($Line in $PotentialStringsWithDomainName) {
+                    if ($Line -match "^\.") {
+                        $null = $PotentialDomainsPrep.Add($Line.Substring(1,$($Line.Length-1)))
+                    }
+                    else {
+                        $null = $PotentialDomainsPrep.Add($Line)
+                    }
+                }
+                [System.Collections.ArrayList]$PotentialDomains = @()
+                foreach ($PotentialDomain in $PotentialDomainsPrep) {
+                    $RegexDomainPattern = "^([a-zA-Z0-9][a-zA-Z0-9-_]*\.)*[a-zA-Z0-9]*[a-zA-Z0-9-_]*[[a-zA-Z0-9]+$"
+                    if ($PotentialDomain -match $RegexDomainPattern) {
+                        $FinalPotentialDomain = $PotentialDomain -replace $ThisHostName,""
+                        if ($FinalPotentialDomain -match "^\.") {
+                            $null = $PotentialDomains.Add($FinalPotentialDomain.Substring(1,$($FinalPotentialDomain.Length-1)))
+                        }
+                        else {
+                            $null = $PotentialDomains.Add($FinalPotentialDomain)
+                        }
+                    }
+                }
+
+                if ($PotentialDomains.Count -eq 1) {
+                    $Domain = $PotentialDomains
+                }
+                else {
+                    $Domain = $PotentialDomains[0]
+                }
+            }
+        }
+
+        if (!$Domain) {
+            Write-Error "Unable to determine domain for $(hostname)! Please use the -DomainName parameter and try again. Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        $DomainControllerPrep = $(host -t srv _ldap._tcp.$Domain) -split "`n"
+        $DomainControllerPrepA = if ($DomainControllerPrep.Count -gt 1) {
+            $DomainControllerPrep | foreach {$($_ -split "[\s]")[-1]}
+        } else {
+            @($($DomainControllerPrep -split "[\s]")[-1])
+        }
+        $DomainControllers = $DomainControllerPrepA | foreach {
+            if ($_[-1] -eq ".") {
+                $_.SubString(0,$($_.Length-1))
+            }
+            else {
+                $_
+            }
+        }
+
+        $FoundDomainControllers = $DomainControllers
+        $PrimaryDomainController = "unknown"
     }
 
-    if ($Domain) {
-        try {
-            $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
+    if ($PSVersionTable.Platform -eq "Win32NT" -or !$PSVersionTable.Platform) {
+        ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
+
+        $ComputerSystemCim = Get-CimInstance Win32_ComputerSystem
+        $PartOfDomain = $ComputerSystemCim.PartOfDomain
+
+        ##### END Variable/Parameter Transforms and PreRun Prep #####
+
+
+        ##### BEGIN Main Body #####
+
+        if (!$PartOfDomain -and !$Domain) {
+            Write-Error "$env:ComputerName is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
+            $global:FunctionResult = "1"
+            return
         }
-        catch {
-            Write-Verbose "Cannot connect to current forest."
+        
+        $ThisMachinesDomain = $ComputerSystemCim.Domain
+
+        # If we're in a PSSession, [system.directoryservices.activedirectory] won't work due to Double-Hop issue
+        # So just get the LogonServer if possible
+        if ($Host.Name -eq "ServerRemoteHost" -or $UseLogonServer) {
+            if (!$Domain -or $Domain -eq $ThisMachinesDomain) {
+                $Counter = 0
+                while ([string]::IsNullOrWhitespace($DomainControllerName) -or $Counter -le 20) {
+                    $DomainControllerName = $(Get-CimInstance win32_ntdomain).DomainControllerName
+                    if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                        Write-Warning "The win32_ntdomain CimInstance has a null value for the 'DomainControllerName' property! Trying again in 15 seconds (will try for 5 minutes total)..."
+                        Start-Sleep -Seconds 15
+                    }
+                    $Counter++
+                }
+
+                if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                    $IPOfDNSServerWhichIsProbablyDC = $(Resolve-DNSName $ThisMachinesDomain).IPAddress
+                    $DomainControllerFQDN = $(ResolveHost -HostNameOrIP $IPOfDNSServerWhichIsProbablyDC).FQDN
+                }
+                else {
+                    $LogonServer = $($DomainControllerName | Where-Object {![string]::IsNullOrWhiteSpace($_)}).Replace('\\','').Trim()
+                    $DomainControllerFQDN = $LogonServer + '.' + $RelevantSubCANetworkInfo.DomainName
+                }
+
+                [pscustomobject]@{
+                    FoundDomainControllers      = [array]$DomainControllerFQDN
+                    PrimaryDomainController     = $DomainControllerFQDN
+                }
+
+                return
+            }
+            else {
+                Write-Error "Unable to determine Domain Controller(s) network location due to the Double-Hop Authentication issue! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
         }
 
-        if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -contains $Domain) {
-            [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | Where-Object {$_.Name -eq $Domain} | foreach {$_.DomainControllers} | foreach {$_.Name}
-            $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
-        }
-        if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -notcontains $Domain) {
+        if ($Domain) {
             try {
-                $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
-                [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
-                $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
+                $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
             }
             catch {
+                Write-Verbose "Cannot connect to current forest."
+            }
+
+            if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -contains $Domain) {
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | Where-Object {$_.Name -eq $Domain} | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
+            }
+            if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -notcontains $Domain) {
+                try {
+                    $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
+                    [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
+                    $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
+                }
+                catch {
+                    try {
+                        Write-Warning "Only able to report the Primary Domain Controller for $Domain! Other Domain Controllers most likely exist!"
+                        Write-Warning "For a more complete list, try running this function on a machine that is part of the domain $Domain!"
+                        $PrimaryDomainController = Parse-NLTest -Domain $Domain
+                        [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                    }
+                    catch {
+                        Write-Error $_
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                }
+            }
+            if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -contains $Domain) {
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
+            }
+            if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -notcontains $Domain) {
                 try {
                     Write-Warning "Only able to report the Primary Domain Controller for $Domain! Other Domain Controllers most likely exist!"
                     Write-Warning "For a more complete list, try running this function on a machine that is part of the domain $Domain!"
@@ -137,57 +257,40 @@ function GetDomainController {
                 }
             }
         }
-        if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -contains $Domain) {
-            [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
-            $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
-        }
-        if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -notcontains $Domain) {
+        else {
             try {
-                Write-Warning "Only able to report the Primary Domain Controller for $Domain! Other Domain Controllers most likely exist!"
-                Write-Warning "For a more complete list, try running this function on a machine that is part of the domain $Domain!"
-                $PrimaryDomainController = Parse-NLTest -Domain $Domain
-                [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
             }
             catch {
-                Write-Error $_
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-    }
-    else {
-        try {
-            $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
-            [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
-            $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
-        }
-        catch {
-            Write-Verbose "Cannot connect to current forest."
-
-            try {
-                $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
-                [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
-                $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
-            }
-            catch {
-                $Domain = $ThisMachinesDomain
+                Write-Verbose "Cannot connect to current forest."
 
                 try {
-                    $CurrentUser = "$(whoami)"
-                    Write-Warning "Only able to report the Primary Domain Controller for the domain that $env:ComputerName is joined to (i.e. $Domain)! Other Domain Controllers most likely exist!"
-                    Write-Host "For a more complete list, try one of the following:" -ForegroundColor Yellow
-                    if ($($CurrentUser -split '\\') -eq $env:ComputerName) {
-                        Write-Host "- Try logging into $env:ComputerName with a domain account (as opposed to the current local account $CurrentUser" -ForegroundColor Yellow
-                    }
-                    Write-Host "- Try using the -Domain parameter" -ForegroundColor Yellow
-                    Write-Host "- Run this function on a computer that is joined to the Domain you are interested in" -ForegroundColor Yellow
-                    $PrimaryDomainController = Parse-NLTest -Domain $Domain
-                    [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                    $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
+                    [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
+                    $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
                 }
                 catch {
-                    Write-Error $_
-                    $global:FunctionResult = "1"
-                    return
+                    $Domain = $ThisMachinesDomain
+
+                    try {
+                        $CurrentUser = "$(whoami)"
+                        Write-Warning "Only able to report the Primary Domain Controller for the domain that $env:ComputerName is joined to (i.e. $Domain)! Other Domain Controllers most likely exist!"
+                        Write-Host "For a more complete list, try one of the following:" -ForegroundColor Yellow
+                        if ($($CurrentUser -split '\\') -eq $env:ComputerName) {
+                            Write-Host "- Try logging into $env:ComputerName with a domain account (as opposed to the current local account $CurrentUser" -ForegroundColor Yellow
+                        }
+                        Write-Host "- Try using the -Domain parameter" -ForegroundColor Yellow
+                        Write-Host "- Run this function on a computer that is joined to the Domain you are interested in" -ForegroundColor Yellow
+                        $PrimaryDomainController = Parse-NLTest -Domain $Domain
+                        [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                    }
+                    catch {
+                        Write-Error $_
+                        $global:FunctionResult = "1"
+                        return
+                    }
                 }
             }
         }
@@ -204,8 +307,8 @@ function GetDomainController {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU3rJpad0TBijH7oHDRphPukyM
-# Zq+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTUKBbQMV400fEnmcGRCvKPXW
+# EFagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -262,11 +365,11 @@ function GetDomainController {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHeerlX2mvm+MHey
-# jLJe5ciH35QNMA0GCSqGSIb3DQEBAQUABIIBACfhh/v4KZoFksjd5J8dw9A3Kwt6
-# 35wHFUkFMy1e8PdJiL1+EjxaPmw89+h5ChBaioT4zsd777L1ODxqoWZu0OnTlzBK
-# S0tyXRLnvVfG3XmpM7JESzrXexCPUXwA0R1VIzVqk41iswPtODd37yyU46iJkcYg
-# 2RicQO2OJaTweFDyDaimXq8gTou3vHPck1cgD33auq+pB0lwWag7kRQ6+t3ENv7B
-# +JLgK2x95qEXqD/uede5geP6bXUD0CqwrFJ8pGAt3h7CUydm1IiOBqFjBOtX0i5i
-# DRtR6ANwgJhIIqKiY+PgqiXqWKZRxB+IZyKT9IebZ2oToDPIx+3u5Tr0w7M=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFFLkFRQXUA1174e
+# k5koT1m9Lz+gMA0GCSqGSIb3DQEBAQUABIIBACsmnAG71A0MJbuMKN1qpjY36TPS
+# SmV32CytmwtSgyW484DBz7wXpymY5T8nggzN5tnd9N3xXEwPNQVf58LZQsfNiG1k
+# IZqICxeimQL6IOIE83A8+Z6sYJbxx16IkpaCPVJ8vkbCVeOdRVd1VTXG45vwivWL
+# 1bZoaFwJXEU/zU9qKY4L+aK+IBiB/8eqMFMn/D0/wX0rHszN5fIQWJPGLrOdfwwO
+# /YkJxSLaHpcdPFstE+EUu9XCOtDbg6JoQJi2wXF123CCA+F2ar8c38e68tNKXkJO
+# ea6vt/6RKK0Zyb/K5Pl96et1BaPRUxoXbXhH7lK4+KBJVAD5UYIJn3HECY4=
 # SIG # End signature block

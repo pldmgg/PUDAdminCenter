@@ -31,7 +31,7 @@ $PSRemotingCredsPageContent = {
         }
     }
 
-    # If $RemoteHost isn't valid, don't load anything else 
+    # If $RemoteHost isn't valid, don't load anything else
     if ($ErrorText) {
         return
     }
@@ -633,7 +633,7 @@ $PSRemotingCredsPageContent = {
                             if ($Local_UserName -notmatch "^$Session:ThisRemoteHost\\[a-zA-Z0-9]+$") {
                                 $Local_UserName = "$Session:ThisRemoteHost\$Local_UserName"
                             }
-        
+                            
                             $LocalPwdSecureString = ConvertTo-SecureString $Local_Password -AsPlainText -Force
                             $LocalAdminCreds = [pscredential]::new($Local_UserName,$LocalPwdSecureString)
                         }
@@ -987,6 +987,13 @@ $PSRemotingCredsPageContent = {
                         New-UDInputAction -Toast "SSH attempts via PowerShell Core 'Invoke-Command' and ssh.exe have failed!" -Duration 10000
                         Sync-UDElement -Id "CredsForm"
                         return
+                    }
+
+                    # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
+                    # sudo password specifically for this user and specifically for running 'sudo pwsh'
+                    $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
+                    if ($CheckSudoStatusResult -eq "PasswordPrompt") {
+                        $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
                     }
                 }
                 if ($Preferred_PSRemotingMethod -eq "WinRM") {

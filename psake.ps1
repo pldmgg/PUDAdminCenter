@@ -154,6 +154,30 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     # Add the Import-Module Universal.Dashboard Module else install .Net Framework 4.7.2 code
     $ImportUDCommCode = @'
 
+if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "Core") {
+    if (![bool]$(Get-Module -ListAvailable WindowsCompatibility)) {
+        try {
+            Install-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if (![bool]$(Get-Module WindowsCompatibility)) {
+        try {
+            Import-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+}
+
 # Can't just install and import UniversalDashboard.Community automatically because of interactive license agreement prompt. So, it must be done
 # manually before trying to import PUDAdminCenter.
 if (![bool]$(Get-Module -ListAvailable UniversalDashboard.Community)) {
@@ -314,8 +338,8 @@ Task Deploy -Depends Build {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUg9NH9RFDO7APfP2ewY2TMH7e
-# bJGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjnVGF+A1HE7+LQwtg13+//QU
+# +Gygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -372,11 +396,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIMKi8NbRKrpKY8L
-# j108DFVZ75BQMA0GCSqGSIb3DQEBAQUABIIBAJBrH+qHikmMC5x2CcCaKzpaDgY9
-# xodg/ooAyOf17q6YJEHY9rMIQ29WBpfawXM2Gpw+0QE8ClzkhDhUYc8Q4YSshg9o
-# 3exPkDfcaP67eQCeMvUZn06WbHlCZz3XdLSc5SNkO6Rl74fwnb2zr1vF5RLTXFuF
-# iczUSqLqFa3Jy4eSnzL84R4MipaVRrvyqhuHJbhr7QX7TbBS01htCnRQh+h9PRnR
-# nnAJsjGG+IPCfODV/sR/90hKnXd/R9WlMaSnSulZBcykbOLhvj+utfCAr0z69aoV
-# +g02NaYia81v6MLKZs2KEvod8z077So8BN+5HWhPkpJ6Roq5w9UbBl/pTts=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFEOAN0OjnVzP4mX
+# WqiQfoaNn02DMA0GCSqGSIb3DQEBAQUABIIBAKtFMviMDuDug8IYeugAXEhzsfht
+# aRUzUTo/MxVlFwD1YgrRKMahSwHCGw/+1lN1VtNlT832flan6Y3DEGNsN0XikVD1
+# 8dSkHScXupN692yC9DRKRDNtj/4/K1ofiiqhUJEvRIR5XvWN7JY5WGz1cwKHEPB6
+# XQRoI0FPeZqcSDhWLqMPnUwt94XiAaRwj8NS/HUsj+3c3tQOl20GNeyvx9J9mn0g
+# 7l2Qcv0dh7GE5bLYK8ILKiFWE+IOFVxddmjuFf1fGrzijlsc1t86fSzglevjiL82
+# TYZPSk0iXpi1xY0hqk1R4YxN0q7QKhfcvZSgcvBRs+laF19ifNoGxxwakGc=
 # SIG # End signature block

@@ -94,6 +94,22 @@ function Get-PUDAdminCenter {
         "Updates"
     )
 
+    if ($PSVersionTable.Platform -eq "Unix") {
+        $RequiredLinuxCommands =  $(Get-Module PUDAdminCenter).Invoke({$RequiredLinuxCommands})
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $RequiredLinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    }
+    if ($CommandsNotPresent.Count -gt 0) {
+        Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     # Make sure we can resolve the $DomainName
     try {
         $DomainName = $(Get-CimInstance Win32_ComputerSystem).Domain
@@ -153,8 +169,11 @@ function Get-PUDAdminCenter {
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
     #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
-    if ($PSVersionTable.PSEdition -eq "Core") {
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Win32NT") {
         [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$_ -replace "CN=",""}
+    }
+    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Unix") {
+        [System.Collections.ArrayList]$InitialRemoteHostListPrep = $InitialRemoteHostListPrep | foreach {$($_ -replace "cn: ","").Trim()}
     }
 
     # Filter Out the Remote Hosts that we can't resolve
@@ -278,8 +297,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUaYvcen5PDHbgBAaRoLaqonpa
-# 9mOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZQ9AyNFu1MBqrUvffk8sa0ow
+# qvSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -336,11 +355,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMVR5L+1BQoW7WYj
-# vuzJLH46+X1YMA0GCSqGSIb3DQEBAQUABIIBAAV3y46IDSAiU/qAKmBYJQujQ8NI
-# yN2m81UHab1Mi1QBzi94nl62FLht5IguZGdgnM+w0rXbjOTyh2hbYUqsIzYcAlkX
-# H2CPOF2CH1/xYbKVUSD1bOymMoFFqLdVIESKD1M/20ME7aQcMpgrDm/ug4SaEJsg
-# F9aMlAQOqZV7W8r7ULKC4pnjMKZIEVxTQS5LlEXHEZOg11kx+d9njEyMD2fdBmku
-# MDFFHPy1qmDHAZZPeANnbPLNd/oeQa8j2GTLRGP5iM/BZ4Xpf5KrTSaRywivtA90
-# vcynhgfDzYauspfdIILFpHGusq7c6Y3MMWlC67+hxsydrbDCvVXzqcye3sk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFO78Njfysh/FpQLm
+# dV0ci6a9n1gGMA0GCSqGSIb3DQEBAQUABIIBAJVzFsLGidUQPtEWhcKViYi3ZIYr
+# bOjK6fnuDfswjGtNd1RSp2q9cNYa7YUgP8H0AxTRxP6QVX065njQw0vchnsOrgdn
+# 1vhN1i34rKAEeZcwaqI7ANyJW6X5zPNfTEuMT1JpxZns+4sjSMJrZR30AgWXncOH
+# Z2mYZXfNop4my3E2iloYSOvSpQcdTIig5N9MvRCCLoSYk8WNXMs5cgZveild/vxQ
+# tGFwNJ6ywfCSoGjJiUhHT3Zh2Wk6eZCl6MGKIndwwpJF5/kArDNM9WHWLx61KKNL
+# uhtOmybAbfX0U6HwBFepWB3cU35xO+gDqtAq8s5YyYGLsrB7k/N8AYUDFDo=
 # SIG # End signature block

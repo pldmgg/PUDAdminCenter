@@ -21,6 +21,7 @@
     ${Function:TestPort}.Ast.Extent.Text
     ${Function:TestSSH}.Ast.Extent.Text
     ${Function:UnzipFile}.Ast.Extent.Text
+    ${Function:Download-NuGetPackage}.Ast.Extent.Text
     ${Function:Get-CertificateOverview}.Ast.Extent.Text
     ${Function:Get-Certificates}.Ast.Extent.Text
     ${Function:Get-CimPnpEntity}.Ast.Extent.Text
@@ -57,11 +58,21 @@
     ${Function:Stop-DiskPerf}.Ast.Extent.Text
 )
 
+$RequiredLinuxCommands = @(
+    "domainname"
+    "whoami"
+    "nslookup"
+    "host"
+    "hostname"
+    "ldapsearch"
+    "expect"
+)
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8wThTap4g0F6ZtMkq627sQTK
-# sHygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIsN6le2JdRG5LARvwaSa0j6I
+# 3/Ggggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -118,11 +129,11 @@
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCsPukx2U+W8/kXo
-# BFgP14VKdSNQMA0GCSqGSIb3DQEBAQUABIIBAIx1Z8zK3mm5c8E9HANFX8luk1su
-# GtR9F2sAWQnjWId4G4ir96tca+vzi7gTrFPQoOvQ92HmHtaqaFhF1RqaFP4p0glI
-# yo8PYxPma3lSAo2frYkZFjRFnma2awRLhVvYgFsrwjNaDYDBviBJBaJEgKvoNUgb
-# gXsVhNAxseJYf1vE2C+eqWZngxvQ3oCrCSgtOvuWMBEWAFA8eNHv4j9j0+oU6A/5
-# 9MzVIPTXkbcCxs7HMgy4m460Yd9mzOhK7raFEG+n4OZG3ClYRkqAbQa5Lf/ipWi/
-# lNEoRsxDzfqvW4/F0VV4FFs6LvlSFAPCesn6iNYg5itYRCT38Tgs4wJXVQs=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMJiCvKOLexDzT92
+# ZHZx1pNw39rQMA0GCSqGSIb3DQEBAQUABIIBALRs/HTRTWoWzn9cMAnr3BnltJuf
+# h6TCHTPVG4a6CJm4aewIt5Ce2ElcJdJpu0GeF3aBmDVaXzMOL4ulnhibvToSyIZI
+# /5bX1xQAywVtQb3WRVe+9CurBljF7nH7jB7i47/mHIoXaLDthw/31CVl4bSgY3et
+# w5ehMrgJT6/waqzBONZj0KFw6ZgMhNhlT5z6kRZJOZFPlL1f0wil6DyNQQsVIYcT
+# vQvXWpooNedVD5rHwB/05WTxYc0aMC1VdYFnsG/76aKmTnIliSwod/mbaK2LE8Jp
+# 8Lhmt87Y0M04uS7FJr7tcqvPUFuVGnzpcRGcjoh8daUsDVfmzN3fCvsqJ1o=
 # SIG # End signature block
