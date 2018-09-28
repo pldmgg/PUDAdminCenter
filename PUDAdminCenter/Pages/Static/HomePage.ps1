@@ -70,12 +70,21 @@ $HomePageContent = {
                 $Session:ScanNetwork = $True
                 Sync-UDElement -Id "ScanNetwork"
 
-                [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
+                if ($PSVersionTable.Platform -eq "Unix") {
+                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = GetComputerObjectsInLDAP -ObjectCount 100 -LDAPCreds $PUDRSSyncHT.LDAPCreds
+                }
+                else {
+                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
+                }
+
                 # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
                 # the user to specify individual/range of hosts/devices that they want to manage.
                 #$ScanRemoteHostListPrep = $ScanRemoteHostListPrep[0..20]
-                if ($PSVersionTable.PSEdition -eq "Core") {
+                if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Win32NT") {
                     [System.Collections.ArrayList]$ScanRemoteHostListPrep = $ScanRemoteHostListPrep | foreach {$_ -replace "CN=",""}
+                }
+                if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Unix") {
+                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $ScanRemoteHostListPrep | foreach {$($_ -replace "cn: ","").Trim()}
                 }
 
                 # Filter Out the Remote Hosts that we can't resolve

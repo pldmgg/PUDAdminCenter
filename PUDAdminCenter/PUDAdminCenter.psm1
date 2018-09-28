@@ -2589,6 +2589,12 @@ function Get-Processes {
         This parameter is a switch. If used, all running PowerShell Universal Dashboard instances will be removed
         prior to starting the Network Monitor Dashboard.
 
+    .PARAMETER LDAPCreds
+        This parameter is OPTIONAL, however, if PUDAdminCenter is being run on Linux, it is MANDATORY.
+
+        This parameter takes a pscredential that represents credentials with (at least) Read Access to your Domain's
+        LDAP / Active Directory database.
+
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
@@ -2605,10 +2611,19 @@ function Get-PUDAdminCenter {
         [switch]$InstallNmap = $False,
 
         [Parameter(Mandatory=$False)]
-        [switch]$RemoveExistingPUD = $True
+        [switch]$RemoveExistingPUD = $True,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$LDAPCreds
     )
 
     #region >> Prep
+
+    if ($PSVersionTable.Platform -eq "Unix" -and !$LDAPCreds) {
+        Write-Error "Running PUDAdminCenter on Linux requires that you supply LDAP/Active Directory Credentials using the -LDAPCreds parameter! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
 
     # Remove all current running instances of PUD
     if ($RemoveExistingPUD) {
@@ -2676,7 +2691,7 @@ function Get-PUDAdminCenter {
 
     # Make sure we can resolve the $DomainName
     try {
-        $DomainName = $(Get-CimInstance Win32_ComputerSystem).Domain
+        $DomainName = GetDomainName
         $ResolveDomainInfo = [System.Net.Dns]::Resolve($DomainName)
     }
     catch {
@@ -2729,7 +2744,13 @@ function Get-PUDAdminCenter {
     # Let's populate $PUDRSSyncHT.RemoteHostList with information that will be needed immediately upon navigating to the $HomePage.
     # For this reason, we're gathering the info before we start the UDDashboard. (Note that the below 'GetComputerObjectInLDAP' Private
     # function gets all Computers in Active Directory without using the ActiveDirectory PowerShell Module)
-    [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 20).Name
+    if ($PSVersionTable.Platform -eq "Unix") {
+        [System.Collections.ArrayList]$InitialRemoteHostListPrep = GetComputerObjectsInLDAP -ObjectCount 20 -LDAPCreds $LDAPCreds
+        $PUDRSSyncHT.Add("LDAPCreds",$LDAPCreds)
+    }
+    else {
+        [System.Collections.ArrayList]$InitialRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 20).Name
+    }
     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
     # the user to specify individual/range of hosts/devices that they want to manage.
     #$InitialRemoteHostListPrep = $InitialRemoteHostListPrep[0..20]
@@ -4491,12 +4512,21 @@ function Get-PUDAdminCenter {
                     $Session:ScanNetwork = $True
                     Sync-UDElement -Id "ScanNetwork"
     
-                    [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
+                    if ($PSVersionTable.Platform -eq "Unix") {
+                        [System.Collections.ArrayList]$ScanRemoteHostListPrep = GetComputerObjectsInLDAP -ObjectCount 100 -LDAPCreds $PUDRSSyncHT.LDAPCreds
+                    }
+                    else {
+                        [System.Collections.ArrayList]$ScanRemoteHostListPrep = $(GetComputerObjectsInLDAP -ObjectCount 100).Name
+                    }
+    
                     # Let's just get 20 of them initially. We want *something* on the HomePage but we don't want hundreds/thousands of entries. We want
                     # the user to specify individual/range of hosts/devices that they want to manage.
                     #$ScanRemoteHostListPrep = $ScanRemoteHostListPrep[0..20]
-                    if ($PSVersionTable.PSEdition -eq "Core") {
+                    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Win32NT") {
                         [System.Collections.ArrayList]$ScanRemoteHostListPrep = $ScanRemoteHostListPrep | foreach {$_ -replace "CN=",""}
+                    }
+                    if ($PSVersionTable.PSEdition -eq "Core" -and $PSVersionTable.Platform -eq "Unix") {
+                        [System.Collections.ArrayList]$ScanRemoteHostListPrep = $ScanRemoteHostListPrep | foreach {$($_ -replace "cn: ","").Trim()}
                     }
     
                     # Filter Out the Remote Hosts that we can't resolve
@@ -7781,8 +7811,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7B15n2axPwddgpzOs7ESpmi7
-# Q2Ogggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmMbZOzuD12Si4StufrJDW/9Y
+# RTCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -7839,11 +7869,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNIr/QZg8vsYwHXP
-# FiW3hpGMPevAMA0GCSqGSIb3DQEBAQUABIIBABUQRmXoGTrd+rCWSbnFj1VoR6p3
-# ufAMhv+z75VVaiFC+Jy8dUuI+un+YuD+jFLe3QyAo+fqK2oo/H12cwxPT7XNpEST
-# orCRtGipXnjTnVo8Ok8BtfQOREkzN+ySqkw5/4I0O1HIvTOV2gAk5h0AQpZhdmGM
-# avDJPo+ujB/w5NXRbJNB5s3XscnQUnwCwPCbWzz7ydCnRFo0w1kiAgZpwF8cIjid
-# mSR0LlluP+5NVSJ62EpUJxtL9GqzBuGTzb/o7Yxn0PD0JDbTZ6xlUecBDnmUK4/8
-# dcNEDoSxyNS8bgXuNiEwkw7dCt6jJJ5GBpa61CpmCsfeN+sanJAgVANsjcw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLlvuapqTm9+DOKG
+# 9QFpwBFvRlxkMA0GCSqGSIb3DQEBAQUABIIBAC8XnIYhOsrcVYepjX+bUv6WwDnL
+# U+HOFiDQL/hTzOqdQ8HwPbg2HaMo3PJMBAMQc+HAhR0/ukF6L6xFQ5kuGnbHunhI
+# wVuf6XI5o6IpFsmsunjFYVM7zX6uoK+hq3SsbKxN/g/jBUA1g2n2SRqI59m9BiwE
+# vIJhLvIp8TlXht/nzM/AVbQry0iDvQBPk8gLE3dcRJyWtI6IFri3j4yDoUEcUdtX
+# zI4GYlUQcpCMYTKCUThKE03bD4Yu0HvafTCgJVdokLWOFROJ/wwYKm8Ymr/Kf55q
+# RLn3mQothdEqHmKT3NXNt+Y02cLoi2WqpXBMazM+zASq3S8X1HFlMQyunlY=
 # SIG # End signature block
