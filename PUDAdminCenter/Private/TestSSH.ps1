@@ -34,6 +34,7 @@ function TestSSH {
     if ($PSVersionTable.Platform -eq "Unix") {
         # Determine if we have the required Linux commands
         [System.Collections.ArrayList]$LinuxCommands = @(
+            "echo"
             "expect"
         )
         [System.Collections.ArrayList]$CommandsNotPresent = @()
@@ -45,31 +46,43 @@ function TestSSH {
         }
 
         if ($CommandsNotPresent.Count -gt 0) {
-            if ($(command -v pacman)) {
-                $null = pacman -S expect --noconfirm
+            [System.Collections.ArrayList]$FailedInstalls = @()
+            if ($CommandsNotPresent -contains "echo") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "coreutils" -CommandName "echo"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("coreutils")
+                }
+            }
+            if ($CommandsNotPresent -contains "expect") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "expect" -CommandName "expect"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("expect")
+                }
             }
     
-            if ($(command -v yum)) {
-                $null = yum -y install expect
-            }
-            elseif ($(command -v dnf)) {
-                $null = dnf -y install expect
-            }
-    
-            if ($(command -v apt)) {
-                $null = apt -y install expect
-            }
-    
-            if ($(command -v zypper)) {
-                $null = zypper install expect --non-interactive
-            }
-    
-            $ExpectCheckResult = command -v 'expect'
-            if (!$ExpectCheckResult) {
-                Write-Error "Unable to find the 'expect' command post-install! Halting!"
+            if ($FailedInstalls.Count -gt 0) {
+                Write-Error "The following Linux packages are required, but were not able to be installed:`n$($FailedInstalls -join "`n")`nHalting!"
                 $global:FunctionResult = "1"
                 return
             }
+        }
+
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+            $global:FunctionResult = "1"
+            return
         }
     }
 
@@ -798,10 +811,29 @@ function TestSSH {
             }
             #>
 
+            if ($OutputTracker) {
+                if ($OutputTracker.Keys -contains "ExpectOutput") {
+                    $OutputTracker.ExpectOutput = $ExpectOutput
+                }
+                else {
+                    $OutputTracker.Add("ExpectOutput",$ExpectOutput)
+                }
+            }
+
             $JsonStartIndex = $ExpectOutput.IndexOf($($ExpectOutput -match '"Output"'))
             $JsonEndIndex = $ExpectOutput.IndexOf($($ExpectOutput -match '^}$'))
             [System.Collections.ArrayList]$FinalJson = $ExpectOutput[$JsonStartIndex..$JsonEndIndex]
             $FinalJson.Insert(0,"{")
+
+            if ($OutputTracker) {
+                if ($OutputTracker.Keys -contains "FinalJson") {
+                    $OutputTracker.FinalJson = $FinalJson
+                }
+                else {
+                    $OutputTracker.Add("FinalJson",$FinalJson)
+                }
+            }
+
             $SSHCheckAsJson = $FinalJson | ConvertFrom-Json
             $script:SSHCheckAsJson = $SSHCheckAsJson
 
@@ -878,6 +910,15 @@ function TestSSH {
             # The below $ExpectOutput is an array of strings
             $ExpectOutput = bash -c "$ExpectScript"
 
+            if ($OutputTracker) {
+                if ($OutputTracker.Keys -contains "ExpectOutput") {
+                    $OutputTracker.ExpectOutput = $ExpectOutput
+                }
+                else {
+                    $OutputTracker.Add("ExpectOutput",$ExpectOutput)
+                }
+            }
+
             # Sample Output
             <#
             PS /home/zeroadmin@zero.lab> $ExpectOutput
@@ -903,8 +944,8 @@ function TestSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUCibi9ATOrFXO87C236YAT8ef
-# B/2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfuXeV7GWSUOQyjRa4D2Q0RVk
+# sM6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -961,11 +1002,11 @@ function TestSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLL1MLFW4LV8nmyy
-# 82jk3Ijf2PdbMA0GCSqGSIb3DQEBAQUABIIBAHmS9R08iDMXDALpZRyRyPLHH1Gr
-# rOGl98ZE8gh6YIZqLU1MJXKyrweTBmJTr75opwEFkif9wH+k7QdN+HkpLboXKtAh
-# 2qODTE4dKVzi9VgZqyw/iKMJ3M09kNQ208GgGDVo5YFjqaTFsYeWWsFV4AXYorbK
-# j8nmmxX9N3XAkDoVlRbGZb0bHxxK2W2IKldzEGNYJnJHEGvGMl7S0/drdltBNn72
-# Ci60zTaoYyoo7sw5EY5k4GkPb+m+sH5aywSOqPaE+TTC0MePJWW4ZTDEugDl9saD
-# yj+GYqdiCnecqNpKkKOfQ1IbRoytkxgfU074IeimSvxO0WYgsgbCf8Gad3c=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOUOa2h1ccQ7teT4
+# Ehbd44JFoBeMMA0GCSqGSIb3DQEBAQUABIIBADYef1kCiDlwv3Qow4eBaeg9OaXX
+# OsUV8MlounMbfZes7Ufo6wk9Sv1JjYbyOtOLPu8GO+R3LlIYsaaQwJ8pamj7fhnL
+# 3ffoNp7Cmay8E5iYh2G+nkaHorQmTHb0gftzgYvX45LfVBg/kjCdZl34ON14BBM2
+# ihNwlh6H5LtdjHpI12D8TquhoTvgz3tFVWgZ5p2LU7Fhct92lnMfZeFZYKzMQaU/
+# 3LzFa9Tm4WGkVlcMKyw//8ItpJEdhrbi2F1hjvqg1Jva9Dt91JYs+vAUVbjE0deK
+# X6b4ywHRGKvOdlNRyIjdZHQ4OWbPPb93izsuPoriQMTxqydVf+wJN1UMin0=
 # SIG # End signature block

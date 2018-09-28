@@ -71,6 +71,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'GetUserObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetWorkingCredentials' | Should Be $False
         $Commands -contains 'InstallFeatureDism' | Should Be $False
+        $Commands -contains 'InstallLinuxPackage' | Should Be $False
         $Commands -contains 'InvokeModuleDependencies' | Should Be $False
         $Commands -contains 'InvokePSCompatibility' | Should Be $False
         $Commands -contains 'ManualPSGalleryModuleInstall' | Should Be $False
@@ -96,6 +97,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Get-LocalGroupUsers' | Should Be $True
         $Commands -contains 'Get-LocalUserBelongGroups' | Should Be $True
         $Commands -contains 'Get-LocalUsers' | Should Be $True
+        $Commands -contains 'Get-NetworkInfo' | Should Be $True
         $Commands -contains 'Get-Networks' | Should Be $True
         $Commands -contains 'Get-PendingUpdates' | Should Be $True
         $Commands -contains 'Get-Processes' | Should Be $True
@@ -136,6 +138,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:GetUserObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetWorkingCredentials}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallFeatureDism}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InstallLinuxPackage}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InvokeModuleDependencies}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InvokePSCompatibility}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:ManualPSGalleryModuleInstall}) | Should Be $True
@@ -153,8 +156,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSlpZ1CJ0PIeV8TTqexSgHtYy
-# ihigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYNYk954wrmx4Wij1+22UcIfH
+# LZ+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -211,11 +214,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMfY45DtI8qSLjAO
-# c75LGD6vwAtsMA0GCSqGSIb3DQEBAQUABIIBAH+fSp0uq6/2bj2UdlH9dcifjBoR
-# qLON79aviwy5lJIIXLKgpcy2uMUCSHKh/SBEydZWwvOYqhu3bHFIdJnQLfG/2XhG
-# 9BmdW5i5rGzW2tM1c4vbhHnZel5VMPrnpYYiB6GBjOJtowvNXHYcjrxTLMxSGHUK
-# xEXgKS0L7oG7nl3FfOydR0YgCl2Y7/jluoh8zzRArSh/IyN/fcq9Rg7L5kWBSmMG
-# 9mEteF21k1k8gsLU6iQ8kAOwfM8KIzn+qvsZgzBz3V7OXEjG+GepvC3p5cauOtbV
-# tvhR83Q5qYurKA7clcVGFkiGC1ms8U/spVE6QxDUV32U5ucQ2yS2bym30oc=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLtMolbABENRlrSe
+# O9UI2ggC/IuUMA0GCSqGSIb3DQEBAQUABIIBACGVCui+FXONB/mGdQBZOMh9Q+Xa
+# h7xBki+Jws7YHxp6G39GXWcWt7G6Gu/TSMdt5egAd3r0ykxdPR4P1ujCgOGiIi4L
+# rnMRDLQ6QAhsGQb3USaAuot5f4oMSNKaCp12PhaRFcqCkANgRwenttcsH1wIzbDR
+# enHWYc9uZ2FTSiOjiI1iO5XOorT+/cZjc4ZEwhfRG5Q9CFCZ3m6qrgiyhvfyZFp1
+# JLNypkMyUxI2dVWqowLmOZguFuyu1JPX31xLMxssdY9MudZQr5Sg6MDXRjIORzLx
+# m4JambpJOecmlUIj1iBZZTpOG858fep8Wpnx47TjtPpdmxd6DVcT9+rKROY=
 # SIG # End signature block

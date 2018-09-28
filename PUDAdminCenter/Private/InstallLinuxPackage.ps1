@@ -1,82 +1,56 @@
-[System.Collections.ArrayList]$script:FunctionsForSBUse = @(
-    ${Function:AddWinRMTrustedHost}.Ast.Extent.Text
-    ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
-    ${Function:CheckSudoStatus}.Ast.Extent.Text
-    ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
-    ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
-    ${Function:GetDomainController}.Ast.Extent.Text
-    ${Function:GetElevation}.Ast.Extent.Text
-    ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
-    ${Function:GetModuleDependencies}.Ast.Extent.Text
-    ${Function:GetNativePath}.Ast.Extent.Text
-    ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
-    ${Function:GetWorkingCredentials}.Ast.Extent.Text
-    ${Function:InstallFeatureDism}.Ast.Extent.Text
-    ${Function:InvokeModuleDependencies}.Ast.Extent.Text
-    ${Function:InvokePSCompatibility}.Ast.Extent.Text
-    ${Function:ManualPSGalleryModuleInstall}.Ast.Extent.Text
-    ${Function:NewUniqueString}.Ast.Extent.Text
-    ${Function:RemoveSudoPwd}.Ast.Extent.Text
-    ${Function:ResolveHost}.Ast.Extent.Text
-    ${Function:TestIsValidIPAddress}.Ast.Extent.Text
-    ${Function:TestLDAP}.Ast.Extent.Text
-    ${Function:TestPort}.Ast.Extent.Text
-    ${Function:TestSSH}.Ast.Extent.Text
-    ${Function:UnzipFile}.Ast.Extent.Text
-    ${Function:Download-NuGetPackage}.Ast.Extent.Text
-    ${Function:Get-CertificateOverview}.Ast.Extent.Text
-    ${Function:Get-Certificates}.Ast.Extent.Text
-    ${Function:Get-CimPnpEntity}.Ast.Extent.Text
-    ${Function:Get-EnvironmentVariables}.Ast.Extent.Text
-    ${Function:Get-EventLogSummary}.Ast.Extent.Text
-    ${Function:Get-FirewallProfile}.Ast.Extent.Text
-    ${Function:Get-FirewallRules}.Ast.Extent.Text
-    ${Function:Get-IPRange}.Ast.Extent.Text
-    ${Function:Get-LocalGroups}.Ast.Extent.Text
-    ${Function:Get-LocalGroupUsers}.Ast.Extent.Text
-    ${Function:Get-LocalUserBelongGroups}.Ast.Extent.Text
-    ${Function:Get-LocalUsers}.Ast.Extent.Text
-    ${Function:Get-Networks}.Ast.Extent.Text
-    ${Function:Get-NetworkInfo}.Ast.Extent.Text
-    ${Function:Get-PendingUpdates}.Ast.Extent.Text
-    ${Function:Get-Processes}.Ast.Extent.Text
-    ${Function:Get-PUDAdminCenter}.Ast.Extent.Text
-    ${Function:Get-RegistrySubKeys}.Ast.Extent.Text
-    ${Function:Get-RegistryValues}.Ast.Extent.Text
-    ${Function:Get-RemoteDesktop}.Ast.Extent.Text
-    ${Function:Get-ScheduledTasks}.Ast.Extent.Text
-    ${Function:Get-ServerInventory}.Ast.Extent.Text
-    ${Function:Get-StorageDisk}.Ast.Extent.Text
-    ${Function:Get-StorageFileShare}.Ast.Extent.Text
-    ${Function:Get-StorageVolume}.Ast.Extent.Text
-    ${Function:Get-WUAHistory}.Ast.Extent.Text
-    ${Function:Install-DotNet472}.Ast.Extent.Text
-    ${Function:New-EnvironmentVariable}.Ast.Extent.Text
-    ${Function:New-Runspace}.Ast.Extent.Text
-    ${Function:Remove-EnvironmentVariable}.Ast.Extent.Text
-    ${Function:Set-ComputerIdentification}.Ast.Extent.Text
-    ${Function:Set-EnvironmentVariable}.Ast.Extent.Text
-    ${Function:Set-RemoteDesktop}.Ast.Extent.Text
-    ${Function:Start-DiskPerf}.Ast.Extent.Text
-    ${Function:Stop-DiskPerf}.Ast.Extent.Text
-)
+function InstallLinuxPackage {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$True)]
+        [string[]]$PossiblePackageNames,
 
-$RequiredLinuxCommands = @(
-    "echo"
-    "whoami"
-    "domainname"
-    "nslookup"
-    "host"
-    "hostname"
-    "ldapsearch"
-    "expect"
-)
+        [Parameter(Mandatory=$True)]
+        [string]$CommandName
+    )
+
+    if (!$(command -v $CommandName)) {
+        foreach ($PackageName in $PossiblePackageNames) {
+            if ($(command -v pacman)) {
+                $null = pacman -S $PackageName --noconfirm *> $null
+            }
+            elseif ($(command -v yum)) {
+                $null = yum -y install $PackageName *> $null
+            }
+            elseif ($(command -v dnf)) {
+                $null = dnf -y install $PackageName *> $null
+            }
+            elseif ($(command -v apt)) {
+                $null = apt -y install $PackageName *> $null
+            }
+            elseif ($(command -v zypper)) {
+                $null = zypper install $PackageName --non-interactive *> $null
+            }
+
+            if ($(command -v $CommandName)) {
+                break
+            }
+        }
+
+        if (!$(command -v $CommandName)) {
+            Write-Error "Unable to find the command $CommandName! Install unsuccessful! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        else {
+            Write-Host "$PackageName was successfully installed!" -ForegroundColor Green
+        }
+    }
+    else {
+        Write-Warning "The command $CommandName is already available!"
+        return
+    }
+}
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0m6HH1keCYkYIAeInpqTds/d
-# o56gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUklze0qz5uhXuGbU9E8n7LsP6
+# vVagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -133,11 +107,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN6WJZ3Vv5k6guty
-# U/PC2OqtepMSMA0GCSqGSIb3DQEBAQUABIIBAKi8w2kCah0KZj9QkcgZaX5x4yyB
-# Gq6Sj/5F8qvK2wqQfq8MNzu2tXCHXfNt+2Qpv61PmerHoAMv9+G3Gim9Rgq0QH0W
-# nulKfrk5fQNDhkVT78WyVqlOHIekEQZHfdzqXlchXXFUQ3GrPJc3HwWKgSBgFu2i
-# bRFDbPbeQIkaGHjYlDi3+NTKafYoM3ia47igYC7JJ6vXOYq8muW6zzK4UkUYteGT
-# 9Mkjw2W5hGrKfV5M8KujgA40AvxojuSFbyTQDoBU74/6Zc6m9vlXQ11dTIh1BF9n
-# o/V189bZe+RZCkPL6JkMcmQD9rd9OnrjnkatYNEPl+yUl+I+JAA4hLATPsA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFAt9jxW0h1fnPA4
+# HpJoa3wevkKaMA0GCSqGSIb3DQEBAQUABIIBALpQljmR5YXEaV5oWfdYyYahTECw
+# NXnla74DlKOn55rCtEwJ1Z4XMnOLgTowam69BH0p0L1vJgF3yoRRwZYMwB/7fkwH
+# Bo9H9tSjdo7qzpfJOfY6mnUGdccb2OG28vjiwzsIzICW0K5Gy8JcR2DY22IXsYgr
+# c5cGg1CuGp0uLA8Fvo86YTkneekPDzi4J4FdWz/Arovg72pD6UZLXmxyQ077rWRf
+# rKZvXvbdGploFsXqUW4f6GYjJvlChKjRa56xm2IEuGIElXzx/YPKJB3/MH2ZUWTm
+# lvl1AxUgz8uC78xZHTmMNFFgUJFErsSP1FGhdi5u1M4D9cQzf4Dta/iPGcc=
 # SIG # End signature block

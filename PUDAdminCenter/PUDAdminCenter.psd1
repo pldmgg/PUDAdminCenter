@@ -71,7 +71,7 @@ PowerShellVersion = '5.1'
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = 'Download-NuGetPackage','Get-Certificates','Get-CertificateOverview','Get-CimPnpEntity','Get-EnvironmentVariables',
                     'Get-EventLogSummary','Get-FirewallProfile','Get-FirewallRules','Get-IPRange','Get-LocalGroups',
-                    'Get-LocalGroupUsers','Get-LocalUserBelongGroups','Get-LocalUsers','Get-Networks',
+                    'Get-LocalGroupUsers','Get-LocalUserBelongGroups','Get-LocalUsers','Get-Networks','Get-NetworkInfo',
                     'Get-PendingUpdates','Get-Processes','Get-PUDAdminCenter','Get-RegistrySubKeys','Get-RegistryValues',
                     'Get-RemoteDesktop','Get-ScheduledTasks','Get-ServerInventory','Get-StorageDisk',
                     'Get-StorageFileShare','Get-StorageVolume','Get-WUAHistory','Install-DotNet472',

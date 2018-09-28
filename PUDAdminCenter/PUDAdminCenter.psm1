@@ -2136,6 +2136,120 @@ function Get-LocalUsers {
 
 <#
     .SYNOPSIS
+        Get all information about interfaces on your local machine
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .PARAMETER InterfaceStatus
+        This parameter is OPTIONAL.
+        
+        This parameter takes a string that has a value of either "Up" or "Down".
+
+    .PARAMETER AddressFamily
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that has a value of either "IPv4" or "IPv6"
+
+    .EXAMPLE
+        # On Windows
+        PS C:\Users\testadmin> Get-NetworkInfo interfaceStatus "Up" -AddressFamily "IPv4"
+
+    .EXAMPLE
+        # On Linux
+        PS /home/pdadmin/Downloads> Get-NetworkInfo interfaceStatus "Up" -AddressFamily "IPv4"
+#>
+function Get-NetworkInfo {
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("Up","Down")]
+        [string]$InterfaceStatus,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("IPv4","IPv6")]
+        [string]$AddressFamily
+    )
+
+    ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
+
+    if ($AddressFamily) {
+        if ($AddressFamily -eq "IPv4") {
+            $AddrFam = "InterNetwork"
+        }
+        if ($AddressFamily -eq "IPv6") {
+            $AddrFam = "InterNetworkV6"
+        }
+    }
+
+    ##### END Variable/Parameter Transforms and PreRun Prep #####
+
+
+    ##### BEGIN Main Body #####
+
+    [System.Collections.Arraylist]$PSObjectCollection = @()
+    $interfaces = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+
+    $InterfacesToExplore = $interfaces
+    if ($InterfaceStatus) {
+        $InterfacesToExplore = $InterfacesToExplore | Where-Object {$_.OperationalStatus -eq $InterfaceStatus}
+    }
+    if ($AddressFamily) {
+        $InterfacesToExplore = $InterfacesToExplore | Where-Object {$($_.GetIPProperties().UnicastAddresses | foreach {$_.Address.AddressFamily}) -contains $AddrFam}
+    }
+
+    foreach ($adapter in $InterfacesToExplore) {
+        $ipprops = $adapter.GetIPProperties()
+        $ippropsPropertyNames = $($ipprops | Get-Member -MemberType Property).Name
+
+        if ($AddressFamily) {
+            $UnicastAddressesToExplore = $ipprops.UnicastAddresses | Where-Object {$_.Address.AddressFamily -eq $AddrFam}
+        }
+        else {
+            $UnicastAddressesToExplore = $ipprops.UnicastAddresses
+        }
+
+        foreach ($ip in $UnicastAddressesToExplore) {
+            $FinalPSObject = [pscustomobject]@{}
+            
+            $adapterPropertyNames = $($adapter | Get-Member -MemberType Property).Name
+            foreach ($adapterPropName in $adapterPropertyNames) {
+                $FinalPSObjectMemberCheck = $($FinalPSObject | Get-Member -MemberType NoteProperty).Name
+                if ($FinalPSObjectMemberCheck -notcontains $adapterPropName) {
+                    $FinalPSObject | Add-Member -MemberType NoteProperty -Name $adapterPropName -Value $($adapter.$adapterPropName)
+                }
+            }
+            
+            foreach ($ippropsPropName in $ippropsPropertyNames) {
+                $FinalPSObjectMemberCheck = $($FinalPSObject | Get-Member -MemberType NoteProperty).Name
+                if ($FinalPSObjectMemberCheck -notcontains $ippropsPropName -and
+                $ippropsPropName -ne "UnicastAddresses" -and $ippropsPropName -ne "MulticastAddresses") {
+                    $FinalPSObject | Add-Member -MemberType NoteProperty -Name $ippropsPropName -Value $($ipprops.$ippropsPropName)
+                }
+            }
+                
+            $ipUnicastPropertyNames = $($ip | Get-Member -MemberType Property).Name
+            foreach ($UnicastPropName in $ipUnicastPropertyNames) {
+                $FinalPSObjectMemberCheck = $($FinalPSObject | Get-Member -MemberType NoteProperty).Name
+                if ($FinalPSObjectMemberCheck -notcontains $UnicastPropName) {
+                    $FinalPSObject | Add-Member -MemberType NoteProperty -Name $UnicastPropName -Value $($ip.$UnicastPropName)
+                }
+            }
+            
+            $null = $PSObjectCollection.Add($FinalPSObject)
+        }
+    }
+
+    $PSObjectCollection
+
+    ##### END Main Body #####
+        
+}
+
+
+<#
+    .SYNOPSIS
         Gets the network ip configuration.
     
     .DESCRIPTION
@@ -2682,11 +2796,63 @@ function Get-PUDAdminCenter {
                 $null = $CommandsNotPresent.Add($CommandName)
             }
         }
-    }
-    if ($CommandsNotPresent.Count -gt 0) {
-        Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
-        $global:FunctionResult = "1"
-        return
+
+        if ($CommandsNotPresent.Count -gt 0) {
+            [System.Collections.ArrayList]$FailedInstalls = @()
+            if ($CommandsNotPresent -contains "echo" -or $CommandsNotPresent -contains "whoami") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "coreutils" -CommandName "echo"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("coreutils")
+                }
+            }
+            if ($CommandsNotPresent -contains "nslookup" -or $CommandsNotPresent -contains "host" -or
+            $CommandsNotPresent -contains "hostname" -or $CommandsNotPresent -contains "domainanme") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames @("dnsutils","bindutils","bind-tools") -CommandName "nslookup"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("dnsutils_bindutils_bind-tools")
+                }
+            }
+            if ($CommandsNotPresent -contains "ldapsearch") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "openldap-clients" -CommandName "ldapsearch"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("openldap-clients")
+                }
+            }
+            if ($CommandsNotPresent -contains "expect") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "expect" -CommandName "expect"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("expect")
+                }
+            }
+    
+            if ($FailedInstalls.Count -gt 0) {
+                Write-Error "The following Linux packages are required, but were not able to be installed:`n$($FailedInstalls -join "`n")`nHalting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $RequiredLinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     # Make sure we can resolve the $DomainName
@@ -2782,6 +2948,17 @@ function Get-PUDAdminCenter {
     foreach ($HName in $InitialRemoteHostListPrep) {
         try {
             $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
+
+            if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                $HostNameOutput = hostname
+                $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+
+                $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                $RemoteHostNetworkInfo.HostName = $HostNameShort
+                $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                $RemoteHostNetworkInfo.Domain = $DomainName
+            }
 
             if ($InitialRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
                 $null = $InitialRemoteHostList.Add($RemoteHostNetworkInfo)
@@ -3505,11 +3682,16 @@ function Get-PUDAdminCenter {
                     New-UDInputField -Type textbox -Name 'VaultServerUrl' -Value $null
                     New-UDInputField -Type select -Name 'Preferred_PSRemotingCredType' -Values @("Local","Domain","SSHCertificate") -DefaultValue "Domain"
     
-                    [System.Collections.ArrayList]$PSRemotingMethodValues = @("WinRM")
-                    if ($PUDRSSyncHT."$Session:ThisRemoteHost`Info".RHostTableData.SSH -eq "Available") {
-                        $null = $PSRemotingMethodValues.Add("SSH")
+                    [System.Collections.ArrayList]$PSRemotingMethodValues = @()
+                    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                        $null = $PSRemotingMethodValues.Add("WinRM")
+                        $DefaultValue = "WinRM"
                     }
-                    New-UDInputField -Type select -Name 'Preferred_PSRemotingMethod' -Values @("WinRM","SSH") -DefaultValue "WinRM"
+                    if ($PUDRSSyncHT."$Session:ThisRemoteHost`Info".RHostTableData.SSH -eq "Available" -or $PSVersionTable.Platform -eq "Unix") {
+                        $null = $PSRemotingMethodValues.Add("SSH")
+                        $DefaultValue = "SSH"
+                    }
+                    New-UDInputField -Type select -Name 'Preferred_PSRemotingMethod' -Values $PSRemotingMethodValues -DefaultValue $DefaultValue
                 } -Endpoint {
                     param(
                         [string]$Local_UserName,
@@ -3730,60 +3912,62 @@ function Get-PUDAdminCenter {
                             }
                         }
     
-                        try {
-                            # Make sure we have the WinSSH Module Available
-                            if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}
-                            if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}
+                        if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                            try {
+                                # Make sure we have the WinSSH Module Available
+                                if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}
+                                if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}
     
-                            # Make sure we have the VaultServer Module Available
-                            if ($(Get-Module -ListAvailable).Name -notcontains "VaultServer") {$null = Install-Module VaultServer -ErrorAction Stop}
-                            if ($(Get-Module).Name -notcontains "VaultServer") {$null = Import-Module VaultServer -ErrorAction Stop}
-                        }
-                        catch {
-                            New-UDInputAction -Toast $_.Exception.Message -Duration 10000
-                            Sync-UDElement -Id "CredsForm"
-                            return
-                        }
-    
-                        if ($(Get-Module).Name -notcontains "WinSSH") {
-                            New-UDInputAction -Toast "The WinSSH Module is not available! Halting!" -Duration 10000
-                            Sync-UDElement -Id "CredsForm"
-                            return
-                        }
-                        if ($(Get-Module).Name -notcontains "VaultServer") {
-                            New-UDInputAction -Toast "The VaultServer Module is not available! Halting!" -Duration 10000
-                            Sync-UDElement -Id "CredsForm"
-                            return
-                        }
-    
-                        # Install OpenSSH-Win64 if it isn't already
-                        if (!$(Test-Path "$env:ProgramFiles\OpenSSH-Win64\ssh.exe")) {
-                            Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh
-                        }
-                        else {
-                            if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
-                                $OpenSSHDir ="$env:ProgramFiles\OpenSSH-Win64"
-                                # Update PowerShell $env:Path
-                                [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
-                                if ($CurrentEnvPathArray -notcontains $OpenSSHDir) {
-                                    $CurrentEnvPathArray.Insert(0,$OpenSSHDir)
-                                    $env:Path = $CurrentEnvPathArray -join ';'
-                                }
-                                
-                                # Update SYSTEM Path
-                                $RegistrySystemPath = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
-                                $CurrentSystemPath = $(Get-ItemProperty -Path $RegistrySystemPath -Name PATH).Path
-                                [System.Collections.Arraylist][array]$CurrentSystemPathArray = $CurrentSystemPath -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
-                                if ($CurrentSystemPathArray -notcontains $OpenSSHDir) {
-                                    $CurrentSystemPathArray.Insert(0,$OpenSSHDir)
-                                    $UpdatedSystemPath = $CurrentSystemPathArray -join ";"
-                                    Set-ItemProperty -Path $RegistrySystemPath -Name PATH -Value $UpdatedSystemPath
-                                }
+                                # Make sure we have the VaultServer Module Available
+                                if ($(Get-Module -ListAvailable).Name -notcontains "VaultServer") {$null = Install-Module VaultServer -ErrorAction Stop}
+                                if ($(Get-Module).Name -notcontains "VaultServer") {$null = Import-Module VaultServer -ErrorAction Stop}
                             }
-                            if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
-                                New-UDInputAction -Toast "Unable to find ssh.exe on $env:ComputerName!" -Duration 10000
+                            catch {
+                                New-UDInputAction -Toast $_.Exception.Message -Duration 10000
                                 Sync-UDElement -Id "CredsForm"
                                 return
+                            }
+    
+                            if ($(Get-Module).Name -notcontains "WinSSH") {
+                                New-UDInputAction -Toast "The WinSSH Module is not available! Halting!" -Duration 10000
+                                Sync-UDElement -Id "CredsForm"
+                                return
+                            }
+                            if ($(Get-Module).Name -notcontains "VaultServer") {
+                                New-UDInputAction -Toast "The VaultServer Module is not available! Halting!" -Duration 10000
+                                Sync-UDElement -Id "CredsForm"
+                                return
+                            }
+    
+                            # Install OpenSSH-Win64 if it isn't already
+                            if (!$(Test-Path "$env:ProgramFiles\OpenSSH-Win64\ssh.exe")) {
+                                Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh
+                            }
+                            else {
+                                if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
+                                    $OpenSSHDir ="$env:ProgramFiles\OpenSSH-Win64"
+                                    # Update PowerShell $env:Path
+                                    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+                                    if ($CurrentEnvPathArray -notcontains $OpenSSHDir) {
+                                        $CurrentEnvPathArray.Insert(0,$OpenSSHDir)
+                                        $env:Path = $CurrentEnvPathArray -join ';'
+                                    }
+                                    
+                                    # Update SYSTEM Path
+                                    $RegistrySystemPath = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
+                                    $CurrentSystemPath = $(Get-ItemProperty -Path $RegistrySystemPath -Name PATH).Path
+                                    [System.Collections.Arraylist][array]$CurrentSystemPathArray = $CurrentSystemPath -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+                                    if ($CurrentSystemPathArray -notcontains $OpenSSHDir) {
+                                        $CurrentSystemPathArray.Insert(0,$OpenSSHDir)
+                                        $UpdatedSystemPath = $CurrentSystemPathArray -join ";"
+                                        Set-ItemProperty -Path $RegistrySystemPath -Name PATH -Value $UpdatedSystemPath
+                                    }
+                                }
+                                if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
+                                    New-UDInputAction -Toast "Unable to find ssh.exe on $env:ComputerName!" -Duration 10000
+                                    Sync-UDElement -Id "CredsForm"
+                                    return
+                                }
                             }
                         }
     
@@ -3950,19 +4134,21 @@ function Get-PUDAdminCenter {
                     # 2) The UserName specified via <UserName>@<DomainShortName>@<RemoteHost> with ssh.exe
     
                     if ($Preferred_PSRemotingMethod -eq "SSH") {
-                        # Make sure we have pwsh
-                        if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
-                            $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe -ExpectedInstallLocation "C:\Program Files\PowerShell"
-                        }
-                        
-                        # NOTE: The Await Module comes with the WinSSH Module that we made sure was installed/imported earlier
-                        try {
-                            Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
-                        }
-                        catch {
-                            New-UDInputAction -Toast "Unable to load the Await Module! Halting!" -Duration 10000
-                            Sync-UDElement -Id "CredsForm"
-                            return
+                        if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                            # Make sure we have pwsh
+                            if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
+                                $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe -ExpectedInstallLocation "C:\Program Files\PowerShell"
+                            }
+                            
+                            # NOTE: The Await Module comes with the WinSSH Module that we made sure was installed/imported earlier
+                            try {
+                                Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
+                            }
+                            catch {
+                                New-UDInputAction -Toast "Unable to load the Await Module! Halting!" -Duration 10000
+                                Sync-UDElement -Id "CredsForm"
+                                return
+                            }
                         }
     
                         if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
@@ -4026,10 +4212,12 @@ function Get-PUDAdminCenter {
     
                         # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
                         # sudo password specifically for this user and specifically for running 'sudo pwsh'
+                        <#
                         $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
                         if ($CheckSudoStatusResult -eq "PasswordPrompt") {
                             $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
                         }
+                        #>
                     }
                     if ($Preferred_PSRemotingMethod -eq "WinRM") {
                         [System.Collections.ArrayList]$CredentialsToTest = @()
@@ -7775,6 +7963,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:Get-LocalUserBelongGroups}.Ast.Extent.Text
     ${Function:Get-LocalUsers}.Ast.Extent.Text
     ${Function:Get-Networks}.Ast.Extent.Text
+    ${Function:Get-NetworkInfo}.Ast.Extent.Text
     ${Function:Get-PendingUpdates}.Ast.Extent.Text
     ${Function:Get-Processes}.Ast.Extent.Text
     ${Function:Get-PUDAdminCenter}.Ast.Extent.Text
@@ -7799,8 +7988,9 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
 )
 
 $RequiredLinuxCommands = @(
-    "domainname"
+    "echo"
     "whoami"
+    "domainname"
     "nslookup"
     "host"
     "hostname"
@@ -7811,8 +8001,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmMbZOzuD12Si4StufrJDW/9Y
-# RTCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfvv+94s8VFBFvQhfrYOWdkym
+# haugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -7869,11 +8059,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLlvuapqTm9+DOKG
-# 9QFpwBFvRlxkMA0GCSqGSIb3DQEBAQUABIIBAC8XnIYhOsrcVYepjX+bUv6WwDnL
-# U+HOFiDQL/hTzOqdQ8HwPbg2HaMo3PJMBAMQc+HAhR0/ukF6L6xFQ5kuGnbHunhI
-# wVuf6XI5o6IpFsmsunjFYVM7zX6uoK+hq3SsbKxN/g/jBUA1g2n2SRqI59m9BiwE
-# vIJhLvIp8TlXht/nzM/AVbQry0iDvQBPk8gLE3dcRJyWtI6IFri3j4yDoUEcUdtX
-# zI4GYlUQcpCMYTKCUThKE03bD4Yu0HvafTCgJVdokLWOFROJ/wwYKm8Ymr/Kf55q
-# RLn3mQothdEqHmKT3NXNt+Y02cLoi2WqpXBMazM+zASq3S8X1HFlMQyunlY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBml8ewJUYSKRp3z
+# X4IuCMTbvuPhMA0GCSqGSIb3DQEBAQUABIIBAKJRI+5jNkCru/OukNS4Q4xGlLCc
+# AqDsxZY8pKMIwV520G06/N1S/IoRqdFFVUb1igojSHLPRAZfbbRd+8TaUYVjten1
+# PUyGcg0U0XErp25IWM0ma94dN33YKvBRuzXRLiqbqLsRILoVDrNzERndaJae8Rom
+# M1qX4Cb8oViqlBbdOUZw2wdjZOEuYxx5kqn9M3jeHHgkE4mn/KTXRRPye5aVk1wF
+# C//D7V98GZN9+/c+GMqJhQeEs7p3OVRqFFHmkGWW58CACL1COJMcro0QqN6ny8Ua
+# uI6Ml1dcX7NBix2IDo8k5YtNCCKYMHozaIR48Ys/rR+c92Ud3E3qJ2IWX2o=
 # SIG # End signature block

@@ -24,64 +24,72 @@ function GetComputerObjectsInLDAP {
         return
     }
 
-     # Determine if we have the required Linux commands
-     [System.Collections.ArrayList]$LinuxCommands = @(
-        "host"
-        "hostname"
-        "ldapsearch"
-    )
-    if (!$Domain) {
-        $null = $LinuxCommands.Add("domainname")
-    }
-    [System.Collections.ArrayList]$CommandsNotPresent = @()
-    foreach ($CommandName in $LinuxCommands) {
-        $CommandCheckResult = command -v $CommandName
-        if (!$CommandCheckResult) {
-            $null = $CommandsNotPresent.Add($CommandName)
+    if ($PSVersionTable.Platform -eq "Unix") {
+        # Determine if we have the required Linux commands
+        [System.Collections.ArrayList]$LinuxCommands = @(
+            "echo"
+            "host"
+            "hostname"
+            "ldapsearch"
+        )
+        if (!$Domain) {
+            $null = $LinuxCommands.Add("domainname")
         }
-    }
-
-    if ($CommandsNotPresent.Count -eq 1 -and $CommandsNotPresent -contains "ldapsearch") {
-        $PackageManagerList = @('pacman','dnf','yum','apt','zypper')
-        
-        if ($(command -v pacman)) {
-            $null = pacman -S openldap-clients --noconfirm
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
         }
 
-        if ($(command -v yum)) {
-            $null = yum -y install openldap-clients
-        }
-        elseif ($(command -v dnf)) {
-            $null = dnf -y install openldap-clients
+        if ($CommandsNotPresent.Count -gt 0) {
+            [System.Collections.ArrayList]$FailedInstalls = @()
+            if ($CommandsNotPresent -contains "echo" -or $CommandsNotPresent -contains "whoami") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "coreutils" -CommandName "echo"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("coreutils")
+                }
+            }
+            if ($CommandsNotPresent -contains "host" -or $CommandsNotPresent -contains "hostname" -or $CommandsNotPresent -contains "domainname") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames @("dnsutils","bindutils","bind-tools") -CommandName "nslookup"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("dnsutils_bindutils_bind-tools")
+                }
+            }
+            if ($CommandsNotPresent -contains "ldapsearch") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "openldap-clients" -CommandName "ldapsearch"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("openldap-clients")
+                }
+            }
+    
+            if ($FailedInstalls.Count -gt 0) {
+                Write-Error "The following Linux packages are required, but were not able to be installed:`n$($FailedInstalls -join "`n")`nHalting!"
+                $global:FunctionResult = "1"
+                return
+            }
         }
 
-        if ($(command -v apt)) {
-            $null = apt -y install openldap-clients
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
         }
-
-        if ($(command -v zypper)) {
-            $null = zypper install openldap-clients --non-interactive
-        }
-
-        $ldapsearchCheckResult = command -v 'ldapsearch'
-        if (!$ldapsearchCheckResult) {
-            Write-Error "Unable to find the 'ldapsearch' command post-install! Halting!"
+    
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
             $global:FunctionResult = "1"
             return
         }
-    }
-    
-    [System.Collections.ArrayList]$CommandsNotPresent = @()
-    foreach ($CommandName in $LinuxCommands) {
-        $CommandCheckResult = command -v $CommandName
-        if (!$CommandCheckResult) {
-            $null = $CommandsNotPresent.Add($CommandName)
-        }
-    }
-    if ($CommandsNotPresent.Count -gt 0) {
-        Write-Error "The following Linux commands are required, but not present on $(hostname):`n$($CommandsNotPresent -join "`n")`nHalting!"
-        $global:FunctionResult = "1"
-        return
     }
 
     # Below $LDAPInfo Output is PSCustomObject with properties: DirectoryEntryInfo, LDAPBaseUri,
@@ -194,8 +202,8 @@ function GetComputerObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUStCTwS8ZwnK/3293HxL03lG2
-# mTqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUM1lnukgtfdpzcNBDnhTdERvg
+# bregggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -252,11 +260,11 @@ function GetComputerObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIP8BwIlDXw+eFFB
-# 2zPqYs4Vb1M5MA0GCSqGSIb3DQEBAQUABIIBACDcVcxmPabh8uh7cyFdnxIfuWwz
-# Ozb+qrGoiVq6kYWlmM56najK79yvcGPQnpzbCw3ZNsZblI8aVbjzyQkxYog6oTrc
-# nVpvihGvnTYUQELKJKnezHBFT0QliP9lxaSfNqv1FV9IUwC69hhItkolJ4TwMcTb
-# nygUeVe/gTZg0Q9ahpVqKQidCDn2bMkXzWKLpB/f3WistTOJ5HRQzmHFUWV4WTvt
-# jGKySx0ts+bg//ST3/MIDJTXfPvNBuclJ+u/hKOvp8yi9HvR0mUva23Zh0bKJsYq
-# UxYf44SoDJw6dGIcICZYE94PHzY7Y5EzH7LB2xUD7EwGksIWE3RekKMZk9A=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJ58UTOEQERyMqkY
+# xw8UQ4N022hOMA0GCSqGSIb3DQEBAQUABIIBAJpT0EJCtR2//hfvgCm3hFHb1wdh
+# 72oZnxiF0YLZk6mGWYSrdVQnia89gHvn1Xtml9623lI9lXUg7+MTndfpSB9ccJGA
+# LjO72a4R2cYla6Bxp9mPcM5ryrGYbXzjzmfbO6MqXEcXqeZJs+Z+3e51DBgPRAnG
+# QBZGcURIgHtICjiCA+V0J1qaC1KHwlHB4EFx0ZfeJZ9FeL/+Pclx7h7dOqq2uGht
+# VvrmwMetA7vDMwDeKkU8MhQJzeARtgO1NzFvUKXyxLWSOYbEkc1UFwfEm9tIhdJw
+# AvLh6IREx3eQIhfrtsHHIFtfMlLYEN9D0mJz99ceib/ffrstbTGT1bZH57o=
 # SIG # End signature block

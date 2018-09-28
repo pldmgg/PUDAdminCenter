@@ -118,11 +118,63 @@ function Get-PUDAdminCenter {
                 $null = $CommandsNotPresent.Add($CommandName)
             }
         }
-    }
-    if ($CommandsNotPresent.Count -gt 0) {
-        Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
-        $global:FunctionResult = "1"
-        return
+
+        if ($CommandsNotPresent.Count -gt 0) {
+            [System.Collections.ArrayList]$FailedInstalls = @()
+            if ($CommandsNotPresent -contains "echo" -or $CommandsNotPresent -contains "whoami") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "coreutils" -CommandName "echo"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("coreutils")
+                }
+            }
+            if ($CommandsNotPresent -contains "nslookup" -or $CommandsNotPresent -contains "host" -or
+            $CommandsNotPresent -contains "hostname" -or $CommandsNotPresent -contains "domainanme") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames @("dnsutils","bindutils","bind-tools") -CommandName "nslookup"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("dnsutils_bindutils_bind-tools")
+                }
+            }
+            if ($CommandsNotPresent -contains "ldapsearch") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "openldap-clients" -CommandName "ldapsearch"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("openldap-clients")
+                }
+            }
+            if ($CommandsNotPresent -contains "expect") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "expect" -CommandName "expect"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("expect")
+                }
+            }
+    
+            if ($FailedInstalls.Count -gt 0) {
+                Write-Error "The following Linux packages are required, but were not able to be installed:`n$($FailedInstalls -join "`n")`nHalting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $RequiredLinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     # Make sure we can resolve the $DomainName
@@ -218,6 +270,17 @@ function Get-PUDAdminCenter {
     foreach ($HName in $InitialRemoteHostListPrep) {
         try {
             $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
+
+            if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                $HostNameOutput = hostname
+                $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+
+                $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                $RemoteHostNetworkInfo.HostName = $HostNameShort
+                $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                $RemoteHostNetworkInfo.Domain = $DomainName
+            }
 
             if ($InitialRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
                 $null = $InitialRemoteHostList.Add($RemoteHostNetworkInfo)
@@ -318,8 +381,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+OClZoWwLT9KJWDMu/Sc532Y
-# 4Sigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDc1GQJa8GhoJUKdG7Ne9VThp
+# FKGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -376,11 +439,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLLAK2T2lRinJZxv
-# 7rpveWnk7Qr0MA0GCSqGSIb3DQEBAQUABIIBAJ3+tKefMWthuqj1bFqp6hffhNn9
-# rNBI7O2XSkOIx/nuIg2a4fmukQnEItddLk+IcHTIsvbOfatDuzCl0Be7ybYnOVqC
-# 08sHLlrpee+kW78l3LdhQTWC2DfirLaxqV4KkvVKdQfQD2QpBxJ3WXwOARsD1cAZ
-# U1e75cC/gLH22W/kCGYAolCJmPISq5oZzhBlvFcMhhzm42xbNQRLOVsvdbImNC4e
-# wHqtkRW1WQ9sx7trxV9t+GL4blh5IIZMcjq2zrZyaDSRwMD9QiMcoaEfUYbBc7xw
-# aK5iBOb6UPazcOsdTnu6qUJ3ZSNTbseqdIiU//PCG7qsYEr1Zi8l/zYx9gM=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGrnrlY/b8Pfc4y0
+# kx/AhMBIA2e4MA0GCSqGSIb3DQEBAQUABIIBAAWyjAjq8gUF8cJ4gBLLhaf83zg8
+# vphL4K2Bi1tgldehAEN/e5hqH7G5jhywrT2Jo6emzDg0wfKfSEBMwo45YrZud8/W
+# LIKTtfAm791o4BLsgGKSmYUoA2oAFOq8sbAUX7ZYnMXrfA+/Hr4ylPWXF8D1KAe7
+# +/S/mgm5ZholKjl9eeB1YeC166S8zmuUDfaHWTDSgMIScOWlPLemQu7suMTNO5Mm
+# wrlv7x6Mm+jILzWvs0RyVByaikvAMjFBMNziqa0TzA79aVseeFkJq5rI+oDjQCRV
+# 85MhDIIhzvBwkpHwssFpxO74wrsqT4AR7tWC0yAOgliz1oGRNQnREjMd6Uk=
 # SIG # End signature block

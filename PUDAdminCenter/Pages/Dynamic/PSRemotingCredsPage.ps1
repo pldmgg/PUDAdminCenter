@@ -470,11 +470,16 @@ $PSRemotingCredsPageContent = {
                 New-UDInputField -Type textbox -Name 'VaultServerUrl' -Value $null
                 New-UDInputField -Type select -Name 'Preferred_PSRemotingCredType' -Values @("Local","Domain","SSHCertificate") -DefaultValue "Domain"
 
-                [System.Collections.ArrayList]$PSRemotingMethodValues = @("WinRM")
-                if ($PUDRSSyncHT."$Session:ThisRemoteHost`Info".RHostTableData.SSH -eq "Available") {
-                    $null = $PSRemotingMethodValues.Add("SSH")
+                [System.Collections.ArrayList]$PSRemotingMethodValues = @()
+                if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                    $null = $PSRemotingMethodValues.Add("WinRM")
+                    $DefaultValue = "WinRM"
                 }
-                New-UDInputField -Type select -Name 'Preferred_PSRemotingMethod' -Values @("WinRM","SSH") -DefaultValue "WinRM"
+                if ($PUDRSSyncHT."$Session:ThisRemoteHost`Info".RHostTableData.SSH -eq "Available" -or $PSVersionTable.Platform -eq "Unix") {
+                    $null = $PSRemotingMethodValues.Add("SSH")
+                    $DefaultValue = "SSH"
+                }
+                New-UDInputField -Type select -Name 'Preferred_PSRemotingMethod' -Values $PSRemotingMethodValues -DefaultValue $DefaultValue
             } -Endpoint {
                 param(
                     [string]$Local_UserName,
@@ -695,60 +700,62 @@ $PSRemotingCredsPageContent = {
                         }
                     }
 
-                    try {
-                        # Make sure we have the WinSSH Module Available
-                        if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}
-                        if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}
+                    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                        try {
+                            # Make sure we have the WinSSH Module Available
+                            if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}
+                            if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}
 
-                        # Make sure we have the VaultServer Module Available
-                        if ($(Get-Module -ListAvailable).Name -notcontains "VaultServer") {$null = Install-Module VaultServer -ErrorAction Stop}
-                        if ($(Get-Module).Name -notcontains "VaultServer") {$null = Import-Module VaultServer -ErrorAction Stop}
-                    }
-                    catch {
-                        New-UDInputAction -Toast $_.Exception.Message -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
-                    }
-
-                    if ($(Get-Module).Name -notcontains "WinSSH") {
-                        New-UDInputAction -Toast "The WinSSH Module is not available! Halting!" -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
-                    }
-                    if ($(Get-Module).Name -notcontains "VaultServer") {
-                        New-UDInputAction -Toast "The VaultServer Module is not available! Halting!" -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
-                    }
-
-                    # Install OpenSSH-Win64 if it isn't already
-                    if (!$(Test-Path "$env:ProgramFiles\OpenSSH-Win64\ssh.exe")) {
-                        Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh
-                    }
-                    else {
-                        if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
-                            $OpenSSHDir ="$env:ProgramFiles\OpenSSH-Win64"
-                            # Update PowerShell $env:Path
-                            [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
-                            if ($CurrentEnvPathArray -notcontains $OpenSSHDir) {
-                                $CurrentEnvPathArray.Insert(0,$OpenSSHDir)
-                                $env:Path = $CurrentEnvPathArray -join ';'
-                            }
-                            
-                            # Update SYSTEM Path
-                            $RegistrySystemPath = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
-                            $CurrentSystemPath = $(Get-ItemProperty -Path $RegistrySystemPath -Name PATH).Path
-                            [System.Collections.Arraylist][array]$CurrentSystemPathArray = $CurrentSystemPath -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
-                            if ($CurrentSystemPathArray -notcontains $OpenSSHDir) {
-                                $CurrentSystemPathArray.Insert(0,$OpenSSHDir)
-                                $UpdatedSystemPath = $CurrentSystemPathArray -join ";"
-                                Set-ItemProperty -Path $RegistrySystemPath -Name PATH -Value $UpdatedSystemPath
-                            }
+                            # Make sure we have the VaultServer Module Available
+                            if ($(Get-Module -ListAvailable).Name -notcontains "VaultServer") {$null = Install-Module VaultServer -ErrorAction Stop}
+                            if ($(Get-Module).Name -notcontains "VaultServer") {$null = Import-Module VaultServer -ErrorAction Stop}
                         }
-                        if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
-                            New-UDInputAction -Toast "Unable to find ssh.exe on $env:ComputerName!" -Duration 10000
+                        catch {
+                            New-UDInputAction -Toast $_.Exception.Message -Duration 10000
                             Sync-UDElement -Id "CredsForm"
                             return
+                        }
+
+                        if ($(Get-Module).Name -notcontains "WinSSH") {
+                            New-UDInputAction -Toast "The WinSSH Module is not available! Halting!" -Duration 10000
+                            Sync-UDElement -Id "CredsForm"
+                            return
+                        }
+                        if ($(Get-Module).Name -notcontains "VaultServer") {
+                            New-UDInputAction -Toast "The VaultServer Module is not available! Halting!" -Duration 10000
+                            Sync-UDElement -Id "CredsForm"
+                            return
+                        }
+
+                        # Install OpenSSH-Win64 if it isn't already
+                        if (!$(Test-Path "$env:ProgramFiles\OpenSSH-Win64\ssh.exe")) {
+                            Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh
+                        }
+                        else {
+                            if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
+                                $OpenSSHDir ="$env:ProgramFiles\OpenSSH-Win64"
+                                # Update PowerShell $env:Path
+                                [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ';' | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+                                if ($CurrentEnvPathArray -notcontains $OpenSSHDir) {
+                                    $CurrentEnvPathArray.Insert(0,$OpenSSHDir)
+                                    $env:Path = $CurrentEnvPathArray -join ';'
+                                }
+                                
+                                # Update SYSTEM Path
+                                $RegistrySystemPath = 'HKLM:\System\CurrentControlSet\Control\Session Manager\Environment'
+                                $CurrentSystemPath = $(Get-ItemProperty -Path $RegistrySystemPath -Name PATH).Path
+                                [System.Collections.Arraylist][array]$CurrentSystemPathArray = $CurrentSystemPath -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)} | Sort-Object | Get-Unique
+                                if ($CurrentSystemPathArray -notcontains $OpenSSHDir) {
+                                    $CurrentSystemPathArray.Insert(0,$OpenSSHDir)
+                                    $UpdatedSystemPath = $CurrentSystemPathArray -join ";"
+                                    Set-ItemProperty -Path $RegistrySystemPath -Name PATH -Value $UpdatedSystemPath
+                                }
+                            }
+                            if (!$(Get-Command ssh -ErrorAction SilentlyContinue)) {
+                                New-UDInputAction -Toast "Unable to find ssh.exe on $env:ComputerName!" -Duration 10000
+                                Sync-UDElement -Id "CredsForm"
+                                return
+                            }
                         }
                     }
 
@@ -915,19 +922,21 @@ $PSRemotingCredsPageContent = {
                 # 2) The UserName specified via <UserName>@<DomainShortName>@<RemoteHost> with ssh.exe
 
                 if ($Preferred_PSRemotingMethod -eq "SSH") {
-                    # Make sure we have pwsh
-                    if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
-                        $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe -ExpectedInstallLocation "C:\Program Files\PowerShell"
-                    }
-                    
-                    # NOTE: The Await Module comes with the WinSSH Module that we made sure was installed/imported earlier
-                    try {
-                        Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
-                    }
-                    catch {
-                        New-UDInputAction -Toast "Unable to load the Await Module! Halting!" -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
+                    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+                        # Make sure we have pwsh
+                        if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
+                            $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe -ExpectedInstallLocation "C:\Program Files\PowerShell"
+                        }
+                        
+                        # NOTE: The Await Module comes with the WinSSH Module that we made sure was installed/imported earlier
+                        try {
+                            Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
+                        }
+                        catch {
+                            New-UDInputAction -Toast "Unable to load the Await Module! Halting!" -Duration 10000
+                            Sync-UDElement -Id "CredsForm"
+                            return
+                        }
                     }
 
                     if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
@@ -991,10 +1000,12 @@ $PSRemotingCredsPageContent = {
 
                     # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
                     # sudo password specifically for this user and specifically for running 'sudo pwsh'
+                    <#
                     $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
                     if ($CheckSudoStatusResult -eq "PasswordPrompt") {
                         $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
                     }
+                    #>
                 }
                 if ($Preferred_PSRemotingMethod -eq "WinRM") {
                     [System.Collections.ArrayList]$CredentialsToTest = @()
