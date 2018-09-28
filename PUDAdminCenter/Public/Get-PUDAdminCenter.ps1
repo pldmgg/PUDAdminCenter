@@ -481,7 +481,7 @@ function Get-PUDAdminCenter {
             }
         }
     
-        # If $RemoteHost isn't valid, don't load anything else 
+        # If $RemoteHost isn't valid, don't load anything else
         if ($ErrorText) {
             return
         }
@@ -1083,7 +1083,7 @@ function Get-PUDAdminCenter {
                                 if ($Local_UserName -notmatch "^$Session:ThisRemoteHost\\[a-zA-Z0-9]+$") {
                                     $Local_UserName = "$Session:ThisRemoteHost\$Local_UserName"
                                 }
-            
+                                
                                 $LocalPwdSecureString = ConvertTo-SecureString $Local_Password -AsPlainText -Force
                                 $LocalAdminCreds = [pscredential]::new($Local_UserName,$LocalPwdSecureString)
                             }
@@ -1437,6 +1437,13 @@ function Get-PUDAdminCenter {
                             New-UDInputAction -Toast "SSH attempts via PowerShell Core 'Invoke-Command' and ssh.exe have failed!" -Duration 10000
                             Sync-UDElement -Id "CredsForm"
                             return
+                        }
+    
+                        # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
+                        # sudo password specifically for this user and specifically for running 'sudo pwsh'
+                        $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
+                        if ($CheckSudoStatusResult -eq "PasswordPrompt") {
+                            $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
                         }
                     }
                     if ($Preferred_PSRemotingMethod -eq "WinRM") {
@@ -2466,8 +2473,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjf+zJOmSr8icX0gx58+Nk7+L
-# DLqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvWqc7+/L5fOcVon4wdeoyq5k
+# N3mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2524,11 +2531,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG7dPFQlb8l/C6Ii
-# 5QPIM68c6C8pMA0GCSqGSIb3DQEBAQUABIIBAMSsQfmhNLwR376wAq1/wN/uixKp
-# U8ojwGpFDGUNAF5hofdQZF6kK/lixo5rRr6cvLtCtWxEdF5yQ6ccpCmUx1/TcM+T
-# q2C1Xkxc2aw8OlzYaYtPRtr8VCXYVSxd27/FfqEhGnYgHDOSlClkeujn7J5oIsgu
-# /iB+94NF1QXD9fS+4iVgY5D4eXfNu9R7cXZNcxyF+7dBJp92neDJ3P6ehDFMAg31
-# BvG98hFz2y/UwHRn0Fr80xSv+2AZy1I9xU7bIS7riWkEie+OJyiw097xFaVW+isy
-# EDKnl4icGitCV1OtxvekK9vZm3aoWC5k819EOxrMp6Ze9kA5mFVOA5S+T/g=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCP8+G4vb0qU3ump
+# Dv20uGLd0mq1MA0GCSqGSIb3DQEBAQUABIIBAARk442u97UN/krUZj/iUaCwUnaC
+# vUxxtLpW2YKYkIZxesO1wz4nLD4YibX23cTCjaJGbx4G7kAQw6fx85Qqktp5dgOp
+# YMJEhOTg/EE03eb35Qf8pKTCoKxAulpUnzMJW9tyObz9Hq+eVkD873COwEoRnJHO
+# Gy1etCOr87xdjAUJC/Pu06SPwrItZGs2HJgLWokIWsfvSjePbMzYUacDIpkuBPhM
+# VrVDE0r/omHw655g7EwZl+V2mx7APlxXA1BhVkwQ8LoBF7xjkyPr/LBW8CLGJbGv
+# Au1AFAKdLpXvqIl4q0O+crgjEaDp8diCpPcwUYWZn/v1JZS5VBzT5cPVKeE=
 # SIG # End signature block

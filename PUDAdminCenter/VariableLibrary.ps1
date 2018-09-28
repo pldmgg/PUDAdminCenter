@@ -1,6 +1,7 @@
 [System.Collections.ArrayList]$script:FunctionsForSBUse = @(
     ${Function:AddWinRMTrustedHost}.Ast.Extent.Text
     ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
+    ${Function:CheckSudoStatus}.Ast.Extent.Text
     ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
     ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetDomainController}.Ast.Extent.Text
@@ -15,6 +16,7 @@
     ${Function:InvokePSCompatibility}.Ast.Extent.Text
     ${Function:ManualPSGalleryModuleInstall}.Ast.Extent.Text
     ${Function:NewUniqueString}.Ast.Extent.Text
+    ${Function:RemoveSudoPwd}.Ast.Extent.Text
     ${Function:ResolveHost}.Ast.Extent.Text
     ${Function:TestIsValidIPAddress}.Ast.Extent.Text
     ${Function:TestLDAP}.Ast.Extent.Text
@@ -71,8 +73,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIsN6le2JdRG5LARvwaSa0j6I
-# 3/Ggggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoDEZXv1aHuTiEz7RcvMmthd1
+# vcKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -129,11 +131,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMJiCvKOLexDzT92
-# ZHZx1pNw39rQMA0GCSqGSIb3DQEBAQUABIIBALRs/HTRTWoWzn9cMAnr3BnltJuf
-# h6TCHTPVG4a6CJm4aewIt5Ce2ElcJdJpu0GeF3aBmDVaXzMOL4ulnhibvToSyIZI
-# /5bX1xQAywVtQb3WRVe+9CurBljF7nH7jB7i47/mHIoXaLDthw/31CVl4bSgY3et
-# w5ehMrgJT6/waqzBONZj0KFw6ZgMhNhlT5z6kRZJOZFPlL1f0wil6DyNQQsVIYcT
-# vQvXWpooNedVD5rHwB/05WTxYc0aMC1VdYFnsG/76aKmTnIliSwod/mbaK2LE8Jp
-# 8Lhmt87Y0M04uS7FJr7tcqvPUFuVGnzpcRGcjoh8daUsDVfmzN3fCvsqJ1o=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHXMPhBKSQpq8SS+
+# AVX73ufCANZVMA0GCSqGSIb3DQEBAQUABIIBABKx2+qX1axdZ1YJngPmbfuHzoZa
+# wp8CgkNSIW8KRayRnjo8fOHqDz5fTRf2zpS4HPDwM1Yurc1/AX+iM23eHQPVHr8V
+# rKmuYuHf9sMtor5DVNpn/xpe/XcrggMX67AiR9BIixnPFKz+tZWEpJGL+37NKEmX
+# qdQ9fvspR9skC+Rlg1ZrmBlNEXTXrd1vopJU/IJMCCHcuo/MtjjY6KTFVjKrqNaD
+# vljOQtonAo3JAda4dbl+gn80daYY3L06BJvBrps+Oz3LonOmQcMR9VHqPKUw1iZj
+# AL99/6wpS9eJqgcLKzjU78420pzkA60zLHy1CmDazWzNvd3HxNIJsbFe/lI=
 # SIG # End signature block

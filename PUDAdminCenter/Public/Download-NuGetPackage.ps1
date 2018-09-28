@@ -1,3 +1,39 @@
+<#
+    
+    .SYNOPSIS
+        The Download-NuGetPackage function download and unzips the specified NuGetPackage using the v3 NuGet API.
+        It also indicated which assembly file (.dll) you should probably use for the PowerShell version (Windows or Core)
+        you are using.
+    
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .PARAMETER AssemblyName
+        This parameter is MANDATORY.
+
+        TODO
+
+    .PARAMETER NuGetPkgDownloadDirectory
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .PARAMETER AllowPreRelease
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .PARAMETER Silent
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Download-NuGetPackage -AssemblyName Newtonsoft.Json -NuGetPkgDownloadDirectory "$HOME\Downloads" -Silent
+    
+#>
 function Download-NuGetPackage {
     [CmdletBinding()]
     Param(
@@ -429,8 +465,8 @@ function Download-NuGetPackage {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEdmbMwI4tQnOwCFwegwMU7MK
-# Fragggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUY/mW/SJgsKtNfaxCq0qLUyfp
+# cxugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -487,11 +523,11 @@ function Download-NuGetPackage {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJMRHItdsY+A6xcx
-# DMFKePVxwzyPMA0GCSqGSIb3DQEBAQUABIIBAF5amokq8lznWGC/Vdkkl2X6A2qF
-# +Dt2yNzWxYzjCjulYZjXc6c4m4/ezz0M7qKni94IqPWltArzM82r4MsnyW79pBzI
-# XS6J2PSXvCubSbRneF+z1q/cEO6CV5UkqdTVxuZGrLYXEVQFAnEZQmb/7OOLgPWk
-# R+gxAWiHVDeYqbpPsWptVpvs7LtMz6bU9MuEqH/Kz/WMsCbbJajx6m24T39L9jg9
-# GDCBeXzEYPgP6MZ26FCKipkxeRC3h5XTfJR94fcCawlWwuRwiU8OLJDgig0MU7hq
-# sPAXPMIgJc2rcAyl/WB0AUhoP2nQOAYJuiWbbdKgO34gmeDcgcheEI45kTs=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOHKfAYJNHge8IJg
+# 3zQGKvI7CCNeMA0GCSqGSIb3DQEBAQUABIIBAGHSZm9ceNfj2NoYpP8+01QMTGpB
+# EcWpxeWTJlksi7oWVwwEWHhXHeWKZGo7coupG/8snaAdCz5uJuH+tgnqoeH0vDoS
+# GYhmZB0PculcPEAPor87vc/EnJIoCeWkjXHdOU3Wy3uzFZqdnjzYqYd+1ZWoZFuH
+# 4Ei4Da/C0yJeaPZsdhZWbDfBwnXl+Y/BtL3bfib9BKbs0hYtfRC+z7YrGFCH3iwB
+# Vdw0qZ/NLPTlXc90nrJwpbiO0cwkBh9Cgi93w64cVc244t4Bskq7iPGDXdJycjYG
+# R90FDK9PlIsjS3XAbVWN7BaTRJHYOkwIjKVfKVaI325LWYPbF2bsthJvrOQ=
 # SIG # End signature block

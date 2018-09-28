@@ -67,6 +67,42 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
 # Public Functions
 
 
+<#
+    
+    .SYNOPSIS
+        The Download-NuGetPackage function download and unzips the specified NuGetPackage using the v3 NuGet API.
+        It also indicated which assembly file (.dll) you should probably use for the PowerShell version (Windows or Core)
+        you are using.
+    
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .PARAMETER AssemblyName
+        This parameter is MANDATORY.
+
+        TODO
+
+    .PARAMETER NuGetPkgDownloadDirectory
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .PARAMETER AllowPreRelease
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .PARAMETER Silent
+        This parameter is OPTIONAL.
+
+        TODO
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Download-NuGetPackage -AssemblyName Newtonsoft.Json -NuGetPkgDownloadDirectory "$HOME\Downloads" -Silent
+    
+#>
 function Download-NuGetPackage {
     [CmdletBinding()]
     Param(
@@ -3009,7 +3045,7 @@ function Get-PUDAdminCenter {
             }
         }
     
-        # If $RemoteHost isn't valid, don't load anything else 
+        # If $RemoteHost isn't valid, don't load anything else
         if ($ErrorText) {
             return
         }
@@ -3611,7 +3647,7 @@ function Get-PUDAdminCenter {
                                 if ($Local_UserName -notmatch "^$Session:ThisRemoteHost\\[a-zA-Z0-9]+$") {
                                     $Local_UserName = "$Session:ThisRemoteHost\$Local_UserName"
                                 }
-            
+                                
                                 $LocalPwdSecureString = ConvertTo-SecureString $Local_Password -AsPlainText -Force
                                 $LocalAdminCreds = [pscredential]::new($Local_UserName,$LocalPwdSecureString)
                             }
@@ -3965,6 +4001,13 @@ function Get-PUDAdminCenter {
                             New-UDInputAction -Toast "SSH attempts via PowerShell Core 'Invoke-Command' and ssh.exe have failed!" -Duration 10000
                             Sync-UDElement -Id "CredsForm"
                             return
+                        }
+    
+                        # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
+                        # sudo password specifically for this user and specifically for running 'sudo pwsh'
+                        $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
+                        if ($CheckSudoStatusResult -eq "PasswordPrompt") {
+                            $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
                         }
                     }
                     if ($Preferred_PSRemotingMethod -eq "WinRM") {
@@ -7666,6 +7709,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
 [System.Collections.ArrayList]$script:FunctionsForSBUse = @(
     ${Function:AddWinRMTrustedHost}.Ast.Extent.Text
     ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
+    ${Function:CheckSudoStatus}.Ast.Extent.Text
     ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
     ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetDomainController}.Ast.Extent.Text
@@ -7680,6 +7724,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:InvokePSCompatibility}.Ast.Extent.Text
     ${Function:ManualPSGalleryModuleInstall}.Ast.Extent.Text
     ${Function:NewUniqueString}.Ast.Extent.Text
+    ${Function:RemoveSudoPwd}.Ast.Extent.Text
     ${Function:ResolveHost}.Ast.Extent.Text
     ${Function:TestIsValidIPAddress}.Ast.Extent.Text
     ${Function:TestLDAP}.Ast.Extent.Text
@@ -7727,13 +7772,17 @@ $RequiredLinuxCommands = @(
     "domainname"
     "whoami"
     "nslookup"
+    "host"
+    "hostname"
+    "ldapsearch"
+    "expect"
 )
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU980PiCqAzV6xIOBJ6V7OAlH8
-# O2Cgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7B15n2axPwddgpzOs7ESpmi7
+# Q2Ogggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -7790,11 +7839,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPVOQ80g9TICLOIf
-# g1/JnCYx8bOxMA0GCSqGSIb3DQEBAQUABIIBAFe8mvoNsBJh9+N4vum22aNrfQtV
-# cv3ubhJUv+iK99XPvi0EZWegO6LrVxPEBo1+188MgaA+HChXze5EiiooZY1QvwjZ
-# s5sb2S03jpbu9QV3MwjLOSoQkx3ePVkxm0qDlr/I8vDDhIreWjSI7GE8nVZSN3VU
-# Esd1hOCaunNi6Ltf7T+K5Ex01m5O3aUYB1GFGbpz0Ca9ZUPpV/pi2b2sF6PpUhWv
-# ZkkocX6x35iDWzKwjzfxUpYXCrNQo/Ji6zXeugKhYhjI6bJm5M6GbmHEbZKvYz1W
-# UcdysvfhhqgTvYLEVYB1MompLEEmjNPYfauuzdTFQM8BjDWzGgmh6fN+YWA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNIr/QZg8vsYwHXP
+# FiW3hpGMPevAMA0GCSqGSIb3DQEBAQUABIIBABUQRmXoGTrd+rCWSbnFj1VoR6p3
+# ufAMhv+z75VVaiFC+Jy8dUuI+un+YuD+jFLe3QyAo+fqK2oo/H12cwxPT7XNpEST
+# orCRtGipXnjTnVo8Ok8BtfQOREkzN+ySqkw5/4I0O1HIvTOV2gAk5h0AQpZhdmGM
+# avDJPo+ujB/w5NXRbJNB5s3XscnQUnwCwPCbWzz7ydCnRFo0w1kiAgZpwF8cIjid
+# mSR0LlluP+5NVSJ62EpUJxtL9GqzBuGTzb/o7Yxn0PD0JDbTZ6xlUecBDnmUK4/8
+# dcNEDoSxyNS8bgXuNiEwkw7dCt6jJJ5GBpa61CpmCsfeN+sanJAgVANsjcw=
 # SIG # End signature block
