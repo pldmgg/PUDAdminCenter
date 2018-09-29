@@ -17,11 +17,13 @@ function GetComputerObjectsInLDAP {
         return
     }
 
-    # Make sure the $LDAPCreds.UserName is in the correct format
-    if ($LDAPCreds.UserName -notmatch "\\") {
-        Write-Error "The -LDAPCreds UserName is NOT in the correct format! The format must be: <Domain>\<User>"
-        $global:FunctionResult = "1"
-        return
+    if ($LDAPCreds) {
+        # Make sure the $LDAPCreds.UserName is in the correct format
+        if ($LDAPCreds.UserName -notmatch "\\") {
+            Write-Error "The -LDAPCreds UserName is NOT in the correct format! The format must be: <Domain>\<User>"
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     if ($PSVersionTable.Platform -eq "Unix") {
@@ -202,8 +204,8 @@ function GetComputerObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUM1lnukgtfdpzcNBDnhTdERvg
-# bregggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUxlI9RYsZD8w4jEfPdnwucf8j
+# s7agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -260,11 +262,11 @@ function GetComputerObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJ58UTOEQERyMqkY
-# xw8UQ4N022hOMA0GCSqGSIb3DQEBAQUABIIBAJpT0EJCtR2//hfvgCm3hFHb1wdh
-# 72oZnxiF0YLZk6mGWYSrdVQnia89gHvn1Xtml9623lI9lXUg7+MTndfpSB9ccJGA
-# LjO72a4R2cYla6Bxp9mPcM5ryrGYbXzjzmfbO6MqXEcXqeZJs+Z+3e51DBgPRAnG
-# QBZGcURIgHtICjiCA+V0J1qaC1KHwlHB4EFx0ZfeJZ9FeL/+Pclx7h7dOqq2uGht
-# VvrmwMetA7vDMwDeKkU8MhQJzeARtgO1NzFvUKXyxLWSOYbEkc1UFwfEm9tIhdJw
-# AvLh6IREx3eQIhfrtsHHIFtfMlLYEN9D0mJz99ceib/ffrstbTGT1bZH57o=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJoC+EpUxMXUe8wf
+# HaHoxxVKXL5nMA0GCSqGSIb3DQEBAQUABIIBALGBcOuucbA26ZikOpmqJ7GmIMiQ
+# TSYRGm+O2ILsf1Y16n66zdl4f1TaKhAmz092qHoNPeATg9Tt8YCXAlsDjh/BtdiR
+# swEy8zthkjptrs4s0ssDH6rT32Y/KkT28LcDSgo/355cfwGOO5rVBcLEkEJzAejO
+# KB0vXLGDX8fad5YF10qGWHIdLW62qY2T5I6YlDBR4HWTq3BxxfZxhpnXhYbQlgYr
+# 0WKMrJRU4+mJ+cNKNa+iVwspmQNyqFhUhyeWPhlCn03eTpz4U+J4oxpccZd46kEg
+# QbCY73X18SqJMOvLboX4LkkFnDQK03HTFTWj9Jf0yTM/DxeyXoHB27Bl4NI=
 # SIG # End signature block

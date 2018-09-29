@@ -95,6 +95,28 @@ $HomePageContent = {
                     try {
                         $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
 
+                        if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                            $HostNameOutput = hostname
+                            $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                            [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+            
+                            $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                            $RemoteHostNetworkInfo.HostName = $HostNameShort
+                            $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                            $RemoteHostNetworkInfo.Domain = $DomainName
+                        }
+
+                        # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+                        # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+                        if (!$RemoteHostNetworkInfo.HostName) {
+                            $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                            $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                            $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                            $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                            $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                            $RemoteHostNetworkInfo.Domain = 'Unknown'
+                        }
+
                         if ($ScanRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
                             $null = $ScanRemoteHostList.Add($RemoteHostNetworkInfo)
                         }
@@ -105,6 +127,13 @@ $HomePageContent = {
                 }
 
                 $PUDRSSyncHT.RemoteHostList = $ScanRemoteHostList
+
+                if ($PUDRSSyncHT.Keys -contains "ScanRemoteHostList") {
+                    $PUDRSSyncHT.ScanRemoteHostList = $ScanRemoteHostList
+                }
+                else {
+                    $PUDRSSyncHT.Add("ScanRemoteHostList",$ScanRemoteHostList)
+                }
 
                 # Add Keys for each of the Remote Hosts in the $InitialRemoteHostList    
                 foreach ($RHost in $ScanRemoteHostList) {
@@ -166,8 +195,36 @@ $HomePageContent = {
                         $HostNameTextBox = Get-UDElement -Id "HostNameOrFQDN"
                         $IPTextBox = Get-UDElement -Id "IPAddress"
 
+                        if ($PUDRSSyncHT.Keys -contains "HostNameTextBox") {
+                            $PUDRSSyncHT.HostNameTextBox = $HostNameTextBox
+                        }
+                        else {
+                            $PUDRSSyncHT.Add("HostNameTextBox",$HostNameTextBox)
+                        }
+
+                        if ($PUDRSSyncHT.Keys -contains "IPTextBox") {
+                            $PUDRSSyncHT.IPTextBox = $IPTextBox
+                        }
+                        else {
+                            $PUDRSSyncHT.Add("IPTextBox",$IPTextBox)
+                        }
+
                         $HostNames = $HostNameTextBox.Attributes['value']
                         $IPAddresses = $IPTextBox.Attributes['value']
+
+                        if ($PUDRSSyncHT.Keys -contains "HostNames") {
+                            $PUDRSSyncHT.HostNames = $HostNames
+                        }
+                        else {
+                            $PUDRSSyncHT.Add("HostNames",$HostNames)
+                        }
+
+                        if ($PUDRSSyncHT.Keys -contains "IPAddresses") {
+                            $PUDRSSyncHT.IPAddresses = $IPAddresses
+                        }
+                        else {
+                            $PUDRSSyncHT.Add("IPAddresses",$IPAddresses)
+                        }
 
                         [System.Collections.ArrayList]$RemoteHostListPrep = @()
 
@@ -319,9 +376,32 @@ $HomePageContent = {
                             try {
                                 $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HNameOrIP -ErrorAction Stop
 
+                                if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                                    $HostNameOutput = hostname
+                                    $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                                    [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+                    
+                                    $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                                    $RemoteHostNetworkInfo.HostName = $HostNameShort
+                                    $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                                    $RemoteHostNetworkInfo.Domain = $DomainName
+                                }
+
+                                # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+                                # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+                                if (!$RemoteHostNetworkInfo.HostName) {
+                                    $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                                    $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                                    $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                                    $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                                    $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                                    $RemoteHostNetworkInfo.Domain = 'Unknown'
+                                }
+
                                 $null = $RemoteHostList.Add($RemoteHostNetworkInfo)
                             }
                             catch {
+                                Show-UDToast -Message $_.Exception.Message -Duration 5000
                                 Show-UDToast -Message "Unable to resolve $HNameOrIP" -Position 'topRight' -Title "CheckDNS" -Duration 5000
                                 continue
                             }
@@ -572,6 +652,17 @@ $HomePageContent = {
                         foreach ($IPAddr in $PUDRSSyncHT.RemoteHostList.IPAddressList) {
                             try {
                                 $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $IPAddr -ErrorAction Stop
+
+                                if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                                    $HostNameOutput = hostname
+                                    $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                                    [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+                    
+                                    $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                                    $RemoteHostNetworkInfo.HostName = $HostNameShort
+                                    $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                                    $RemoteHostNetworkInfo.Domain = $DomainName
+                                }
 
                                 # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
                                 # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN

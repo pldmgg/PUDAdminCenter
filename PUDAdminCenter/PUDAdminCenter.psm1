@@ -4725,6 +4725,28 @@ function Get-PUDAdminCenter {
                         try {
                             $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HName -ErrorAction Stop
     
+                            if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                                $HostNameOutput = hostname
+                                $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                                [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+                
+                                $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                                $RemoteHostNetworkInfo.HostName = $HostNameShort
+                                $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                                $RemoteHostNetworkInfo.Domain = $DomainName
+                            }
+    
+                            # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+                            # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+                            if (!$RemoteHostNetworkInfo.HostName) {
+                                $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                                $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                                $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                                $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                                $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                                $RemoteHostNetworkInfo.Domain = 'Unknown'
+                            }
+    
                             if ($ScanRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
                                 $null = $ScanRemoteHostList.Add($RemoteHostNetworkInfo)
                             }
@@ -4735,6 +4757,13 @@ function Get-PUDAdminCenter {
                     }
     
                     $PUDRSSyncHT.RemoteHostList = $ScanRemoteHostList
+    
+                    if ($PUDRSSyncHT.Keys -contains "ScanRemoteHostList") {
+                        $PUDRSSyncHT.ScanRemoteHostList = $ScanRemoteHostList
+                    }
+                    else {
+                        $PUDRSSyncHT.Add("ScanRemoteHostList",$ScanRemoteHostList)
+                    }
     
                     # Add Keys for each of the Remote Hosts in the $InitialRemoteHostList    
                     foreach ($RHost in $ScanRemoteHostList) {
@@ -4796,8 +4825,36 @@ function Get-PUDAdminCenter {
                             $HostNameTextBox = Get-UDElement -Id "HostNameOrFQDN"
                             $IPTextBox = Get-UDElement -Id "IPAddress"
     
+                            if ($PUDRSSyncHT.Keys -contains "HostNameTextBox") {
+                                $PUDRSSyncHT.HostNameTextBox = $HostNameTextBox
+                            }
+                            else {
+                                $PUDRSSyncHT.Add("HostNameTextBox",$HostNameTextBox)
+                            }
+    
+                            if ($PUDRSSyncHT.Keys -contains "IPTextBox") {
+                                $PUDRSSyncHT.IPTextBox = $IPTextBox
+                            }
+                            else {
+                                $PUDRSSyncHT.Add("IPTextBox",$IPTextBox)
+                            }
+    
                             $HostNames = $HostNameTextBox.Attributes['value']
                             $IPAddresses = $IPTextBox.Attributes['value']
+    
+                            if ($PUDRSSyncHT.Keys -contains "HostNames") {
+                                $PUDRSSyncHT.HostNames = $HostNames
+                            }
+                            else {
+                                $PUDRSSyncHT.Add("HostNames",$HostNames)
+                            }
+    
+                            if ($PUDRSSyncHT.Keys -contains "IPAddresses") {
+                                $PUDRSSyncHT.IPAddresses = $IPAddresses
+                            }
+                            else {
+                                $PUDRSSyncHT.Add("IPAddresses",$IPAddresses)
+                            }
     
                             [System.Collections.ArrayList]$RemoteHostListPrep = @()
     
@@ -4949,9 +5006,32 @@ function Get-PUDAdminCenter {
                                 try {
                                     $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $HNameOrIP -ErrorAction Stop
     
+                                    if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                                        $HostNameOutput = hostname
+                                        $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                                        [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+                        
+                                        $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                                        $RemoteHostNetworkInfo.HostName = $HostNameShort
+                                        $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                    }
+    
+                                    # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+                                    # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+                                    if (!$RemoteHostNetworkInfo.HostName) {
+                                        $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                                        $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                                        $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                                        $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                                        $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                                        $RemoteHostNetworkInfo.Domain = 'Unknown'
+                                    }
+    
                                     $null = $RemoteHostList.Add($RemoteHostNetworkInfo)
                                 }
                                 catch {
+                                    Show-UDToast -Message $_.Exception.Message -Duration 5000
                                     Show-UDToast -Message "Unable to resolve $HNameOrIP" -Position 'topRight' -Title "CheckDNS" -Duration 5000
                                     continue
                                 }
@@ -5202,6 +5282,17 @@ function Get-PUDAdminCenter {
                             foreach ($IPAddr in $PUDRSSyncHT.RemoteHostList.IPAddressList) {
                                 try {
                                     $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $IPAddr -ErrorAction Stop
+    
+                                    if ($RemoteHostNetworkInfo.HostName -eq "localhost") {
+                                        $HostNameOutput = hostname
+                                        $HostNameShort = if ($HostNameOutput -match "\.") {$($HostNameOutput -split "\.")[0]} else {$HostNameOutput}
+                                        [System.Collections.ArrayList][array]$IPAddresses = Get-NetworkInfo -InterfaceStatus Up -AddressFamily IPv4 | foreach {$_.Address.IPAddressToString}
+                        
+                                        $RemoteHostNetworkInfo.FQDN = $HostNameOutput
+                                        $RemoteHostNetworkInfo.HostName = $HostNameShort
+                                        $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
+                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                    }
     
                                     # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
                                     # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
@@ -8001,8 +8092,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfvv+94s8VFBFvQhfrYOWdkym
-# haugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBwmGGe9SpZEYeIqbacsiAwIV
+# jcWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -8059,11 +8150,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBml8ewJUYSKRp3z
-# X4IuCMTbvuPhMA0GCSqGSIb3DQEBAQUABIIBAKJRI+5jNkCru/OukNS4Q4xGlLCc
-# AqDsxZY8pKMIwV520G06/N1S/IoRqdFFVUb1igojSHLPRAZfbbRd+8TaUYVjten1
-# PUyGcg0U0XErp25IWM0ma94dN33YKvBRuzXRLiqbqLsRILoVDrNzERndaJae8Rom
-# M1qX4Cb8oViqlBbdOUZw2wdjZOEuYxx5kqn9M3jeHHgkE4mn/KTXRRPye5aVk1wF
-# C//D7V98GZN9+/c+GMqJhQeEs7p3OVRqFFHmkGWW58CACL1COJMcro0QqN6ny8Ua
-# uI6Ml1dcX7NBix2IDo8k5YtNCCKYMHozaIR48Ys/rR+c92Ud3E3qJ2IWX2o=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLhFWzIuzpFkrylL
+# b8UuDfNbjkNXMA0GCSqGSIb3DQEBAQUABIIBAJuws4isvOd7cyZ7dYfqOqjAHKxS
+# NQxKRUtP2exaGtjWVfHsfulGZ1cXRaC2CoI5xynnC+2byLgWGosjj18FnkUOhpex
+# fJJ+rMtl63MICXSSoxXd1QHKcXqtA8v0hLNIhU8bq//o2aY40rIcdGgCApIsjOv8
+# XzecnJ2+eCylJbVSvYQ6K8tKuisIyUErM+72n2bz0pT+lQpbKGfry/YbnHKarxX/
+# sz+KY9yq3YnKuGvWFslMxj7nx6A4WeWJBWdZJIdwqSgWSaxK2m2mfSTzY0C0PTzp
+# Ga/Hs92PM6jDWkR5uq/jQf9r7r6qZP1k/1czTcUAGiEaIButgN8o0w+GZqQ=
 # SIG # End signature block
