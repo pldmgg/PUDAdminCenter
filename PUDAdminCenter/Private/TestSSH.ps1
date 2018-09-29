@@ -86,6 +86,8 @@ function TestSSH {
         }
     }
 
+    $TrySSHExe = $False
+
     #endregion >> Prep
     
     if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
@@ -187,6 +189,26 @@ function TestSSH {
                         $PUDRSSyncHT.Add("CheckResponsesOutput",$CheckResponsesOutput)
                     }
                 }
+
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
                 return
             }
 
@@ -208,20 +230,22 @@ function TestSSH {
             #region >> Make Sure Await Module Is Working
             
             if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]") {
-                try {
-                    $null = Stop-AwaitSession
-                }
-                catch {
-                    if ($PSAwaitProcess.Id -eq $PID) {
-                        Write-Error "The PSAwaitSession never spawned! Halting!"
-                        $global:FunctionResult = "1"
-                        return
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
                     }
-                    else {
-                        Stop-Process -Id $PSAwaitProcess.Id
-                        while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                            Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
-                            Start-Sleep -Seconds 1
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
                         }
                     }
                 }
@@ -263,6 +287,26 @@ function TestSSH {
                             $PUDRSSyncHT.Add("CheckResponsesOutput",$CheckResponsesOutput)
                         }
                     }
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
                     return
                 }
 
@@ -280,20 +324,22 @@ function TestSSH {
                 New-UDInputAction -Toast "Something went wrong with the PowerShell Await Module! Halting!" -Duration 10000
                 Sync-UDElement -Id "CredsForm"
 
-                try {
-                    $null = Stop-AwaitSession
-                }
-                catch {
-                    if ($PSAwaitProcess.Id -eq $PID) {
-                        Write-Error "The PSAwaitSession never spawned! Halting!"
-                        $global:FunctionResult = "1"
-                        return
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
                     }
-                    else {
-                        Stop-Process -Id $PSAwaitProcess.Id
-                        while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                            Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
-                            Start-Sleep -Seconds 1
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
                         }
                     }
                 }
@@ -324,13 +370,33 @@ function TestSSH {
                 if ($Counter -eq 11) {
                     New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                     Sync-UDElement -Id "CredsForm"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
                     return
                 }
 
                 $CheckSendYesOutput = $CheckExpectedSendYesOutput | foreach {$_ -split "`n"}
                 if ($OutputTracker) {
                     if ($PUDRSSyncHT.Keys -contains "CheckSendYesOutput") {
-                        $PUDRSSyncHT.CheckResponsesOutput = $CheckSendYesOutput
+                        $PUDRSSyncHT.CheckSendYesOutput = $CheckSendYesOutput
                     }
                     else {
                         $PUDRSSyncHT.Add("CheckSendYesOutput",$CheckSendYesOutput)
@@ -371,6 +437,26 @@ function TestSSH {
 
                         New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                         Sync-UDElement -Id "CredsForm"
+
+                        if ($PSAwaitProcess.Id) {
+                            try {
+                                $null = Stop-AwaitSession
+                            }
+                            catch {
+                                if ($PSAwaitProcess.Id -eq $PID) {
+                                    Write-Error "The PSAwaitSession never spawned! Halting!"
+                                    $global:FunctionResult = "1"
+                                    return
+                                }
+                                else {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                        Start-Sleep -Seconds 1
+                                    }
+                                }
+                            }
+                        }
                         return
                     }
 
@@ -414,6 +500,26 @@ function TestSSH {
 
                     New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                     Sync-UDElement -Id "CredsForm"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
                     return
                 }
 
@@ -484,20 +590,22 @@ function TestSSH {
                 }
             }
 
-            try {
-                $null = Stop-AwaitSession
-            }
-            catch {
-                if ($PSAwaitProcess.Id -eq $PID) {
-                    Write-Error "The PSAwaitSession never spawned! Halting!"
-                    $global:FunctionResult = "1"
-                    return
+            if ($PSAwaitProcess.Id) {
+                try {
+                    $null = Stop-AwaitSession
                 }
-                else {
-                    Stop-Process -Id $PSAwaitProcess.Id
-                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
-                        Start-Sleep -Seconds 1
+                catch {
+                    if ($PSAwaitProcess.Id -eq $PID) {
+                        Write-Error "The PSAwaitSession never spawned! Halting!"
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                    else {
+                        Stop-Process -Id $PSAwaitProcess.Id
+                        while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                            Start-Sleep -Seconds 1
+                        }
                     }
                 }
             }
@@ -505,7 +613,7 @@ function TestSSH {
             if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful") {
                 $TrySSHExe = $True
                 New-UDInputAction -Toast "SSH via PowerShell Core 'Invoke-Command' failed!" -Duration 10000
-                Sync-UDElement -Id "CredsForm"
+                #Sync-UDElement -Id "CredsForm"
             }
         }
 
@@ -590,6 +698,26 @@ function TestSSH {
                         $PUDRSSyncHT.Add("CheckResponsesOutput",$CheckResponsesOutput)
                     }
                 }
+
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
                 return
             }
 
@@ -624,6 +752,26 @@ function TestSSH {
                 if ($Counter -eq 11) {
                     New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                     Sync-UDElement -Id "CredsForm"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
                     return
                 }
 
@@ -671,8 +819,37 @@ function TestSSH {
 
                         New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                         Sync-UDElement -Id "CredsForm"
+
+                        if ($PSAwaitProcess.Id) {
+                            try {
+                                $null = Stop-AwaitSession
+                            }
+                            catch {
+                                if ($PSAwaitProcess.Id -eq $PID) {
+                                    Write-Error "The PSAwaitSession never spawned! Halting!"
+                                    $global:FunctionResult = "1"
+                                    return
+                                }
+                                else {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                        Start-Sleep -Seconds 1
+                                    }
+                                }
+                            }
+                        }
                         return
                     }
+
+                    if ($PUDRSSyncHT.Keys -contains "SSHOutputPrep") {
+                        $PUDRSSyncHT.SSHOutputPrep = $SSHOutputPrep
+                    }
+                    else {
+                        $PUDRSSyncHT.Add("SSHOutputPrep",$SSHOutputPrep)
+                    }
+    
+                    $script:SSHOutputPrep = $SSHOutputPrep
                 }
             }
             elseif ($CheckResponsesOutput -match [regex]::Escape("'s password:")) {
@@ -709,7 +886,34 @@ function TestSSH {
 
                     New-UDInputAction -Toast "SSH failed! Please check your credentials." -Duration 10000
                     Sync-UDElement -Id "CredsForm"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
                     return
+                }
+
+                if ($PUDRSSyncHT.Keys -contains "SSHOutputPrep") {
+                    $PUDRSSyncHT.SSHOutputPrep = $SSHOutputPrep
+                }
+                else {
+                    $PUDRSSyncHT.Add("SSHOutputPrep",$SSHOutputPrep)
                 }
 
                 $script:SSHOutputPrep = $SSHOutputPrep
@@ -949,8 +1153,8 @@ function TestSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUER9mvM/jcl84hwGObBnmskNO
-# 3mugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVnlfo4dcy24JaWBplHqxAWfi
+# W+2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1007,11 +1211,11 @@ function TestSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLR2IUVhvreMDGxw
-# lbiCRdFWSIeLMA0GCSqGSIb3DQEBAQUABIIBABgi+Vml6b0afIaA+W0yBSXS39at
-# MAzshYHoItq5s4PVYlV1GigHuZsxN59essW0Ji7lVuGQnmPvIUmkBHvSzn1+TYM8
-# WDxbjNalYZHRENkc0EuUpT0T8JB+f3W552eIrSl2N5Nrta+5u7KZ1iEZSdFUIkOV
-# rFWs15fmI0CCysq3qPYHdqkpgpQRWHDgjR+QrKYNO40OdTfTFHqet5NaUy8Owfqy
-# 6sP0m+DgoEbqsjeUIZpepoTvaBnPaBZN7gBIc8qOetJMemUzgFgsM8P758fkj4vq
-# 2vqqwlXh/U6CrGNTys72gf2jKskUtdZlgOHQ4Kggx0Hs8MM4vhSiOMG6g4E=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEYxwx6efFqkeZ3u
+# Yczoqi3QYB1RMA0GCSqGSIb3DQEBAQUABIIBAJTQZQUuutBP5RsyLmF8qZggW60G
+# bc3psM2NZev1VFySshO1EX7g59an3DsWki2oRx7fKskzZlZpnL+xKCuEVlRfPlU8
+# 854hero38u98ojbvxn9vVD3aoQNJA9nhemj/RX7/Yhgw3YVUGhc8HyHAdT0urUIm
+# 999lxa7u/UckoKb+2BKZtLhH3wDRg48gjMuPcNscTV4cyxxFxUDLElItbn4Kg6Z6
+# PcWRJVedS1cFJESqiND7EJ0c/Jchs0Mzxph0TNnihB8x/MPRyt1RjKqgfm3uf8XW
+# s8gtV7UpvaTK8htEybJuIovogO0iSU073RWweyxJVo+k9DW4mDvqsRyzYL8=
 # SIG # End signature block

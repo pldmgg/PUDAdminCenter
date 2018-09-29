@@ -981,7 +981,7 @@ $PSRemotingCredsPageContent = {
                         $SSHTestSplatParams.Add("LocalUserName",$Local_UserName)
                         $SSHTestSplatParams.Add("LocalPassword",$Local_Password)
                     }
-                    if ($Domain_UserName -and $DOmain_Password) {
+                    if ($Domain_UserName -and $Domain_Password) {
                         $SSHTestSplatParams.Add("DomainUserName",$Domain_UserName)
                         $SSHTestSplatParams.Add("DomainPassword",$Domain_Password)
                     }

@@ -1526,7 +1526,7 @@ function Get-PUDAdminCenter {
                             $SSHTestSplatParams.Add("LocalUserName",$Local_UserName)
                             $SSHTestSplatParams.Add("LocalPassword",$Local_Password)
                         }
-                        if ($Domain_UserName -and $DOmain_Password) {
+                        if ($Domain_UserName -and $Domain_Password) {
                             $SSHTestSplatParams.Add("DomainUserName",$Domain_UserName)
                             $SSHTestSplatParams.Add("DomainPassword",$Domain_Password)
                         }
@@ -2680,8 +2680,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcgdXtSUsEwf3vST0nQL1+U6Y
-# K1mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEZLXGlO+behEp6OoIFQj2+zU
+# X4Ggggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2738,11 +2738,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIjKnjgKWyrkpUnJ
-# /gN9uezT0U1YMA0GCSqGSIb3DQEBAQUABIIBABPp5rO0Eash+tOvRDGpFb3Z0GgV
-# /72Q7fUPgdh9s1pZVdbwj8wgzRJUJswxykgxWEO455Kpd9ieasI8iXi4PigxvC0o
-# WrwdIYYHAOOi5arqljYb5qLsaG+OutoiyKf9Lwyj5vhemH7dSYKSe08rTsjdcY8u
-# PJpfGxTLd2GfzBaqEkV+KFkvpFj1FcE3YxSPTz7nUSkrFGsk59+sbjc/o6v8LYMJ
-# sjx9Uq/cWUtnTd8FYZTCiq1CYYq17dAfe3voYYP/nOEKWvfELym6hXqlQvO90uO5
-# 7sGAMoLRYIrJE7QWSIKVfY4mnl4ny7V3d+CnmBxe6641YIOFt3Y80219LkI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBcgPXsPSObfeSoE
+# fTQWjf1f4h6WMA0GCSqGSIb3DQEBAQUABIIBAAWDMbopKVZac6SnmY2tO8HiIllO
+# 7cmKVQh7FYA9HKDSTJrakSuBkJQfKIguXBILXqaUW310gF/Z4sjf1Y8r05L3epAK
+# cGkQ1VAkaZDPmaGxSEfwEVEHXWz7LXuVt5frbFxwOkuWl2jUBamghKrXpnoTdbCA
+# fDn2ccw2Bw97BK8I+n8zQ2ZiAYN2xfDrlD4T2Xz6MXa4Fqn0cGrLjnFHVtM5b/b9
+# HnM5B5sSLM9/wrbC5DQfkdA5Nr2Lx9++VIykVEJLwx7T9lwQH/KqLSTGZE7kn+IV
+# 6xCpgzfHwfYBH5/Weg2nUOCE+9BbHh4cNc0zRYVe6+zI9kPUdS6wVM/jH6g=
 # SIG # End signature block
