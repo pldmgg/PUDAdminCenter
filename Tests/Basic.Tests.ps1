@@ -7,14 +7,14 @@ param(
 # NOTE: `Set-BuildEnvironment -Force -Path $PSScriptRoot` from build.ps1 makes the following $env: available:
 <#
     $env:BHBuildSystem = "Unknown"
-    $env:BHProjectPath = "U:\powershell\WinAdminCenterPS\Sudo"
+    $env:BHProjectPath = "U:\powershell\ProjectRepos\PUDAdminCenter"
     $env:BHBranchName = "master"
     $env:BHCommitMessage = "!deploy"
     $env:BHBuildNumber = 0
-    $env:BHProjectName = "WinAdminCenterPS"
-    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\WinAdminCenterPS\WinAdminCenterPS\WinAdminCenterPS.psd1"
-    $env:BHModulePath = "U:\powershell\ProjectRepos\WinAdminCenterPS\WinAdminCenterPS"
-    $env:BHBuildOutput = "U:\powershell\ProjectRepos\WinAdminCenterPS\BuildOutput"
+    $env:BHProjectName = "PUDAdminCenter"
+    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\PUDAdminCenter\PUDAdminCenter\PUDAdminCenter.psd1"
+    $env:BHModulePath = "U:\powershell\ProjectRepos\PUDAdminCenter\PUDAdminCenter"
+    $env:BHBuildOutput = "U:\powershell\ProjectRepos\PUDAdminCenter\BuildOutput"
 #>
 
 # Verbose output for non-master builds on appveyor
