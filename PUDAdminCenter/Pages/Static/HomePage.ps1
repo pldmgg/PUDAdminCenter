@@ -28,6 +28,7 @@ $HomePageContent = {
 
     # Load PUDAdminCenter Module Functions Within ScriptBlock
     $ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}
+    New-UDColumn -EndPoint {$Cache:ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}}
 
     #region >> Loading Indicator
 
@@ -103,7 +104,7 @@ $HomePageContent = {
                             $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                             $RemoteHostNetworkInfo.HostName = $HostNameShort
                             $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                            $RemoteHostNetworkInfo.Domain = $DomainName
+                            $RemoteHostNetworkInfo.Domain = GetDomainName
                         }
 
                         # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -384,7 +385,7 @@ $HomePageContent = {
                                     $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                     $RemoteHostNetworkInfo.HostName = $HostNameShort
                                     $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                    $RemoteHostNetworkInfo.Domain = $DomainName
+                                    $RemoteHostNetworkInfo.Domain = GetDomainName
                                 }
 
                                 # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -661,7 +662,7 @@ $HomePageContent = {
                                     $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                     $RemoteHostNetworkInfo.HostName = $HostNameShort
                                     $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                    $RemoteHostNetworkInfo.Domain = $DomainName
+                                    $RemoteHostNetworkInfo.Domain = GetDomainName
                                 }
 
                                 # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable

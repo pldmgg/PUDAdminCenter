@@ -5,6 +5,7 @@
     ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
     ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetDomainController}.Ast.Extent.Text
+    ${Function:GetDomainName}.Ast.Extent.Text
     ${Function:GetElevation}.Ast.Extent.Text
     ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetModuleDependencies}.Ast.Extent.Text
@@ -75,8 +76,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0m6HH1keCYkYIAeInpqTds/d
-# o56gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUeECkeJ2m/+jtaaE9l998Xyn
+# gQ2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -133,11 +134,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN6WJZ3Vv5k6guty
-# U/PC2OqtepMSMA0GCSqGSIb3DQEBAQUABIIBAKi8w2kCah0KZj9QkcgZaX5x4yyB
-# Gq6Sj/5F8qvK2wqQfq8MNzu2tXCHXfNt+2Qpv61PmerHoAMv9+G3Gim9Rgq0QH0W
-# nulKfrk5fQNDhkVT78WyVqlOHIekEQZHfdzqXlchXXFUQ3GrPJc3HwWKgSBgFu2i
-# bRFDbPbeQIkaGHjYlDi3+NTKafYoM3ia47igYC7JJ6vXOYq8muW6zzK4UkUYteGT
-# 9Mkjw2W5hGrKfV5M8KujgA40AvxojuSFbyTQDoBU74/6Zc6m9vlXQ11dTIh1BF9n
-# o/V189bZe+RZCkPL6JkMcmQD9rd9OnrjnkatYNEPl+yUl+I+JAA4hLATPsA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOlcAk07lohTZAcP
+# b9B9yaX3mBP9MA0GCSqGSIb3DQEBAQUABIIBAMOEmJ5mY1I1aAg5xtyc3l4H9w5n
+# yuBz1hd0PjbtICTKQgzmk4TuPJ8me/X7DGq1LMFRBnSFwwmmAd6pCRSkjRMYBiff
+# 2b2/FBlXWbzh/sEWWLugyHWaA9Fvxo1wsWB8kpjSktB/7qs3SCmTwyi3dcbimPPp
+# N8q8zn8oWDwtQkTKkB06W+KiWIfyUa628foMwN4e6eAMNq8L0h7g3UPxYxL+ZIfB
+# q2lc0mclWSTwDY3wh2eCdXe+GbpZtoZT1dC4jrPGSwt0OowYsaGOjgBx4tfknctx
+# wEAQ+vMwuP+e0sTuSeh6vbHTzYJ9fx5ii+zQMu8XtzU0rsLXZ4oMlixlflM=
 # SIG # End signature block

@@ -2957,7 +2957,18 @@ function Get-PUDAdminCenter {
                 $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                 $RemoteHostNetworkInfo.HostName = $HostNameShort
                 $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                $RemoteHostNetworkInfo.Domain = $DomainName
+                $RemoteHostNetworkInfo.Domain = GetDomainName
+            }
+
+            # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+            # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+            if (!$RemoteHostNetworkInfo.HostName) {
+                $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                $RemoteHostNetworkInfo.Domain = 'Unknown'
             }
 
             if ($InitialRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
@@ -4658,6 +4669,7 @@ function Get-PUDAdminCenter {
     
         # Load PUDAdminCenter Module Functions Within ScriptBlock
         $ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}
+        New-UDColumn -EndPoint {$Cache:ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}}
     
         #region >> Loading Indicator
     
@@ -4733,7 +4745,7 @@ function Get-PUDAdminCenter {
                                 $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                 $RemoteHostNetworkInfo.HostName = $HostNameShort
                                 $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                $RemoteHostNetworkInfo.Domain = $DomainName
+                                $RemoteHostNetworkInfo.Domain = GetDomainName
                             }
     
                             # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -5014,7 +5026,7 @@ function Get-PUDAdminCenter {
                                         $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                         $RemoteHostNetworkInfo.HostName = $HostNameShort
                                         $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                        $RemoteHostNetworkInfo.Domain = GetDomainName
                                     }
     
                                     # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -5291,7 +5303,7 @@ function Get-PUDAdminCenter {
                                         $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                         $RemoteHostNetworkInfo.HostName = $HostNameShort
                                         $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                        $RemoteHostNetworkInfo.Domain = GetDomainName
                                     }
     
                                     # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -8022,6 +8034,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
     ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetDomainController}.Ast.Extent.Text
+    ${Function:GetDomainName}.Ast.Extent.Text
     ${Function:GetElevation}.Ast.Extent.Text
     ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetModuleDependencies}.Ast.Extent.Text
@@ -8092,8 +8105,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBwmGGe9SpZEYeIqbacsiAwIV
-# jcWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU1b0H8FGCFVIy4YzbimlQzyRn
+# 8aSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -8150,11 +8163,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLhFWzIuzpFkrylL
-# b8UuDfNbjkNXMA0GCSqGSIb3DQEBAQUABIIBAJuws4isvOd7cyZ7dYfqOqjAHKxS
-# NQxKRUtP2exaGtjWVfHsfulGZ1cXRaC2CoI5xynnC+2byLgWGosjj18FnkUOhpex
-# fJJ+rMtl63MICXSSoxXd1QHKcXqtA8v0hLNIhU8bq//o2aY40rIcdGgCApIsjOv8
-# XzecnJ2+eCylJbVSvYQ6K8tKuisIyUErM+72n2bz0pT+lQpbKGfry/YbnHKarxX/
-# sz+KY9yq3YnKuGvWFslMxj7nx6A4WeWJBWdZJIdwqSgWSaxK2m2mfSTzY0C0PTzp
-# Ga/Hs92PM6jDWkR5uq/jQf9r7r6qZP1k/1czTcUAGiEaIButgN8o0w+GZqQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFP37ATECLrTLdUVY
+# yiMO0fCC/ntfMA0GCSqGSIb3DQEBAQUABIIBAE8LNG8d28dizu6KSJkHAVQeGv5m
+# u+i3CNjQezldMAGsTac7XYmAL81rJu/BJwxRmDjWs1cA4kRV8qlHY+A5KNbgB1hS
+# fpxsgrTgVp/UIXlEKXxyWcIrRRjJuvhS0C/hVCJA93PicoO4hSmKdvk43M3pj8Bd
+# cYnCkjdWKri8VO3MvC2mZlRv3XCSaIT7tekx5PsnVrbjhOIPKHfvCQIEA+v1NWrc
+# u7PqJhSxayE9c7/P0sCGGlE32IdpjMfF2dpBLaR6jfACM3bBxDo2kQL8K+wj+7y8
+# NHDkbUk9iSlA48sflXVI+xacwowFUQ4QkTCjAn8FZMt1gQwjZbQS7DVGFJA=
 # SIG # End signature block

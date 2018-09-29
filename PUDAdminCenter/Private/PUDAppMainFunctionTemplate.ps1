@@ -279,7 +279,18 @@ function Get-PUDAdminCenter {
                 $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                 $RemoteHostNetworkInfo.HostName = $HostNameShort
                 $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                $RemoteHostNetworkInfo.Domain = $DomainName
+                $RemoteHostNetworkInfo.Domain = GetDomainName
+            }
+
+            # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+            # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+            if (!$RemoteHostNetworkInfo.HostName) {
+                $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                $RemoteHostNetworkInfo.Domain = 'Unknown'
             }
 
             if ($InitialRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
@@ -381,8 +392,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDc1GQJa8GhoJUKdG7Ne9VThp
-# FKGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUePizpsqRPBumpH/F5+8luojQ
+# Ll2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -439,11 +450,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGrnrlY/b8Pfc4y0
-# kx/AhMBIA2e4MA0GCSqGSIb3DQEBAQUABIIBAAWyjAjq8gUF8cJ4gBLLhaf83zg8
-# vphL4K2Bi1tgldehAEN/e5hqH7G5jhywrT2Jo6emzDg0wfKfSEBMwo45YrZud8/W
-# LIKTtfAm791o4BLsgGKSmYUoA2oAFOq8sbAUX7ZYnMXrfA+/Hr4ylPWXF8D1KAe7
-# +/S/mgm5ZholKjl9eeB1YeC166S8zmuUDfaHWTDSgMIScOWlPLemQu7suMTNO5Mm
-# wrlv7x6Mm+jILzWvs0RyVByaikvAMjFBMNziqa0TzA79aVseeFkJq5rI+oDjQCRV
-# 85MhDIIhzvBwkpHwssFpxO74wrsqT4AR7tWC0yAOgliz1oGRNQnREjMd6Uk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFC1+UAqKRG3LcLQW
+# X9cpGIUVBodXMA0GCSqGSIb3DQEBAQUABIIBAAJc5Y9S/vj80dmfe/RwYgaTRv8d
+# 2hgctlzYuz87i2rFGFmbXlrAtMV1rNuHKQNGvosDQC42vBr5BtD7PeNi+L0wMRdV
+# ZUn9Bl462EfxTzPUPzbNP3eNspQwU5MZO02xHZdxPi45ICoFmeK71lFmc2BjMZ8K
+# gReJVmwetBpxAQF8WscGAwL3sB6Gp/xMyla6Exqu0wJFnKjrZUkjuv5B9sJvOji6
+# wZ28R9KSrRGmjLWjnslmFBJQpK9hi6MmKRpxfcE9Eu8LwnxFnxV7ss3q309CGSIj
+# IuWy5XIkdBOVGW7jFsWYW3poZDFlzaQRmlMYv0uPyMvbxOrCZjSec8oi3rw=
 # SIG # End signature block

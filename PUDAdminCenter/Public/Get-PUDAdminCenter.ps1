@@ -279,7 +279,18 @@ function Get-PUDAdminCenter {
                 $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                 $RemoteHostNetworkInfo.HostName = $HostNameShort
                 $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                $RemoteHostNetworkInfo.Domain = $DomainName
+                $RemoteHostNetworkInfo.Domain = GetDomainName
+            }
+
+            # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
+            # So, we need to do the below to compensate for code downstream that relies on HostName, Domain, and FQDN
+            if (!$RemoteHostNetworkInfo.HostName) {
+                $IPAddr = $RemoteHostNetworkInfo.IPAddressList[0]
+                $LastTwoOctets = $($IPAddr -split '\.')[2..3] -join 'Dot'
+                $UpdatedHostName = NewUniqueString -PossibleNewUniqueString "Unknown$LastTwoOctets" -ArrayOfStrings $PUDRSSyncHT.RemoteHostList.HostName
+                $RemoteHostNetworkInfo.HostName = $UpdatedHostName
+                $RemoteHostNetworkInfo.FQDN = $UpdatedHostName + '.Unknown'
+                $RemoteHostNetworkInfo.Domain = 'Unknown'
             }
 
             if ($InitialRemoteHostList.FQDN -notcontains $RemoteHostNetworkInfo.FQDN) {
@@ -1980,6 +1991,7 @@ function Get-PUDAdminCenter {
     
         # Load PUDAdminCenter Module Functions Within ScriptBlock
         $ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}
+        New-UDColumn -EndPoint {$Cache:ThisModuleFunctionsStringArray | Where-Object {$_ -ne $null} | foreach {Invoke-Expression $_ -ErrorAction SilentlyContinue}}
     
         #region >> Loading Indicator
     
@@ -2055,7 +2067,7 @@ function Get-PUDAdminCenter {
                                 $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                 $RemoteHostNetworkInfo.HostName = $HostNameShort
                                 $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                $RemoteHostNetworkInfo.Domain = $DomainName
+                                $RemoteHostNetworkInfo.Domain = GetDomainName
                             }
     
                             # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -2336,7 +2348,7 @@ function Get-PUDAdminCenter {
                                         $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                         $RemoteHostNetworkInfo.HostName = $HostNameShort
                                         $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                        $RemoteHostNetworkInfo.Domain = GetDomainName
                                     }
     
                                     # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -2613,7 +2625,7 @@ function Get-PUDAdminCenter {
                                         $RemoteHostNetworkInfo.FQDN = $HostNameOutput
                                         $RemoteHostNetworkInfo.HostName = $HostNameShort
                                         $RemoteHostNetworkInfo.IPAddressList = $IPAddresses
-                                        $RemoteHostNetworkInfo.Domain = $DomainName
+                                        $RemoteHostNetworkInfo.Domain = GetDomainName
                                     }
     
                                     # ResolveHost will NOT throw an error even if it can't figure out HostName, Domain, or FQDN as long as $IPAddr IS pingable
@@ -2668,8 +2680,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUMZ7D1tQ3hSQCfPXgaPF6lICp
-# Ly2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcgdXtSUsEwf3vST0nQL1+U6Y
+# K1mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2726,11 +2738,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAno7lswUYdV4Sza
-# nD+DczUdu+rrMA0GCSqGSIb3DQEBAQUABIIBAEjojrVdtWT5/NDz7Og4WOsRcG4k
-# 1aMCl6ek7Vr8oFhGy3JKkTJArD1lH4PT7vOliMxDwwC2kf1k/jpqE0pgJ7ZcgedU
-# o4S6+Ar1elduAxJphfGfZdQQj5xt2quId19UQCx28yB93g2HUcu3olZmgnz8mkR3
-# 7nEK+vPApdE2dkjLJYxl3SYf+B4fK3kd/SLhPqVX2fOE+RwPh+G1E7cqFsu0/ZTC
-# Kc8AVTAstSsxT3ncPNiyv/MBZ9y74aKjPApvUpSkHVm4EkpGUWa9NFzSzNEknqxM
-# 2HIjVC0vvHlDIuBgBCUiZYmwVtET5q/rMHMn4j1Kmc0HUEkn+nRGjPOlryM=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIjKnjgKWyrkpUnJ
+# /gN9uezT0U1YMA0GCSqGSIb3DQEBAQUABIIBABPp5rO0Eash+tOvRDGpFb3Z0GgV
+# /72Q7fUPgdh9s1pZVdbwj8wgzRJUJswxykgxWEO455Kpd9ieasI8iXi4PigxvC0o
+# WrwdIYYHAOOi5arqljYb5qLsaG+OutoiyKf9Lwyj5vhemH7dSYKSe08rTsjdcY8u
+# PJpfGxTLd2GfzBaqEkV+KFkvpFj1FcE3YxSPTz7nUSkrFGsk59+sbjc/o6v8LYMJ
+# sjx9Uq/cWUtnTd8FYZTCiq1CYYq17dAfe3voYYP/nOEKWvfELym6hXqlQvO90uO5
+# 7sGAMoLRYIrJE7QWSIKVfY4mnl4ny7V3d+CnmBxe6641YIOFt3Y80219LkI=
 # SIG # End signature block

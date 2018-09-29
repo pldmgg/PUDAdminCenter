@@ -834,8 +834,13 @@ function TestSSH {
                 }
             }
 
-            $SSHCheckAsJson = $FinalJson | ConvertFrom-Json
-            $script:SSHCheckAsJson = $SSHCheckAsJson
+            try {
+                $SSHCheckAsJson = $FinalJson | ConvertFrom-Json
+                $script:SSHCheckAsJson = $SSHCheckAsJson
+            }
+            catch {
+                $TrySSHExe = $True
+            }
 
             if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful") {
                 $TrySSHExe = $True
@@ -944,8 +949,8 @@ function TestSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfuXeV7GWSUOQyjRa4D2Q0RVk
-# sM6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUER9mvM/jcl84hwGObBnmskNO
+# 3mugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1002,11 +1007,11 @@ function TestSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOUOa2h1ccQ7teT4
-# Ehbd44JFoBeMMA0GCSqGSIb3DQEBAQUABIIBADYef1kCiDlwv3Qow4eBaeg9OaXX
-# OsUV8MlounMbfZes7Ufo6wk9Sv1JjYbyOtOLPu8GO+R3LlIYsaaQwJ8pamj7fhnL
-# 3ffoNp7Cmay8E5iYh2G+nkaHorQmTHb0gftzgYvX45LfVBg/kjCdZl34ON14BBM2
-# ihNwlh6H5LtdjHpI12D8TquhoTvgz3tFVWgZ5p2LU7Fhct92lnMfZeFZYKzMQaU/
-# 3LzFa9Tm4WGkVlcMKyw//8ItpJEdhrbi2F1hjvqg1Jva9Dt91JYs+vAUVbjE0deK
-# X6b4ywHRGKvOdlNRyIjdZHQ4OWbPPb93izsuPoriQMTxqydVf+wJN1UMin0=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLR2IUVhvreMDGxw
+# lbiCRdFWSIeLMA0GCSqGSIb3DQEBAQUABIIBABgi+Vml6b0afIaA+W0yBSXS39at
+# MAzshYHoItq5s4PVYlV1GigHuZsxN59essW0Ji7lVuGQnmPvIUmkBHvSzn1+TYM8
+# WDxbjNalYZHRENkc0EuUpT0T8JB+f3W552eIrSl2N5Nrta+5u7KZ1iEZSdFUIkOV
+# rFWs15fmI0CCysq3qPYHdqkpgpQRWHDgjR+QrKYNO40OdTfTFHqet5NaUy8Owfqy
+# 6sP0m+DgoEbqsjeUIZpepoTvaBnPaBZN7gBIc8qOetJMemUzgFgsM8P758fkj4vq
+# 2vqqwlXh/U6CrGNTys72gf2jKskUtdZlgOHQ4Kggx0Hs8MM4vhSiOMG6g4E=
 # SIG # End signature block
