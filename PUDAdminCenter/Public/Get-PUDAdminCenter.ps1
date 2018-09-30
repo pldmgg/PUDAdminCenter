@@ -1543,6 +1543,64 @@ function Get-PUDAdminCenter {
                             return
                         }
     
+                        if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $True
+    
+                            if ($SSHCheckAsJson.Platform -eq "Win32NT") {
+                                $OSDetermination = "Windows"
+                                $ShellDetermination = "pwsh"
+                            }
+                            else {
+                                $OSDetermination = "Linux"
+                                $ShellDetermination = "bash"
+                            }
+    
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+    
+                        }
+                        if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $False
+    
+                            if ($SSHOutputPrep -match "Microsoft|Windows|Win32NT") {
+                                $OSDetermination = "Windows"
+                                if ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Core") {
+                                    $ShellDetermination = "pwsh"
+                                }
+                                elseif ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Desktop") {
+                                    $ShellDetermination = "powershell"
+                                }
+                                else {
+                                    $ShellDetermination = "cmd"
+                                }
+                            }
+                            else {
+                                $OSDetermination = "Linux"
+                                $ShellDetermination = "bash"
+                            }
+    
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+    
+                            # Try and setup PSRemoting on the remote host by using 'ssh -t' script
+                            # NOTE: we have $SSHCmdString thanks to the 'TestSSH' private function used above
+                            # $SSHCmdString looks like this:
+                            #   ssh -t zeroadmin@zero@192.168.2.49 "$InstallPwshScript"
+                            [System.Collections.ArrayList][array]$SSHCmdStringPrep = $($SSHCmdString -split "`n")[0..2]
+    
+                            if ($OSDetermination -eq "Linux") {
+    
+                            }
+    
+                            if ($OSDetermination -eq "Windows") {
+    
+                            }
+    
+    
+                        }
+    
+                        # If PSRemoting doesn't work...
+    
                         # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
                         # sudo password specifically for this user and specifically for running 'sudo pwsh'
                         <#
@@ -1676,9 +1734,11 @@ function Get-PUDAdminCenter {
                     }
     
                     if ($Preferred_PSRemotingMethod -eq "SSH") {
-                        New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
+                        if (!$PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingWorks) {
+                            New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
+                            Sync-UDElement -Id "CredsForm"
+                            return
+                        }
                     }
     
                     New-UDInputAction -RedirectUrl "/ToolSelect/$Session:ThisRemoteHost"
@@ -2680,8 +2740,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEZLXGlO+behEp6OoIFQj2+zU
-# X4Ggggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2Se4oA6GMiTIBsDtrmRNB4LN
+# Rvugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2738,11 +2798,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBcgPXsPSObfeSoE
-# fTQWjf1f4h6WMA0GCSqGSIb3DQEBAQUABIIBAAWDMbopKVZac6SnmY2tO8HiIllO
-# 7cmKVQh7FYA9HKDSTJrakSuBkJQfKIguXBILXqaUW310gF/Z4sjf1Y8r05L3epAK
-# cGkQ1VAkaZDPmaGxSEfwEVEHXWz7LXuVt5frbFxwOkuWl2jUBamghKrXpnoTdbCA
-# fDn2ccw2Bw97BK8I+n8zQ2ZiAYN2xfDrlD4T2Xz6MXa4Fqn0cGrLjnFHVtM5b/b9
-# HnM5B5sSLM9/wrbC5DQfkdA5Nr2Lx9++VIykVEJLwx7T9lwQH/KqLSTGZE7kn+IV
-# 6xCpgzfHwfYBH5/Weg2nUOCE+9BbHh4cNc0zRYVe6+zI9kPUdS6wVM/jH6g=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDJ2lew8vgScPkYa
+# 0IPZ+DuCp8RQMA0GCSqGSIb3DQEBAQUABIIBAJ8MHBVbIzgbpUCt1HysWcE1RiIZ
+# /pFkzuLCo5rW55cJT/HpzbXrsCDMDZ0Q5b8e7X+dWs4RdqirzhwBVha53Kq2QmZR
+# TsTp1v88m8AdvP+KiBIySfackxyTcYis2hOkfTg2zYbkQq0alcsdU9Mpl6hM/+pz
+# HEbMraJk5XsA85L0R2ncnJtPV5jx0FO+rB3ph6gwKdPEG0HUES04ZmSbabjcx4sH
+# l3eBzpIOh/gi9CGiVNv1gAwhPSOOCEmagEQWsk6dYaFuVr9+CZtFelUU/vmdwSLZ
+# +HcKsvYdjwJVnq4w2CnuIMtORWJrDEoswu4lDoQwZCH9dGQ0mVeXCUPa4FU=
 # SIG # End signature block

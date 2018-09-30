@@ -998,6 +998,64 @@ $PSRemotingCredsPageContent = {
                         return
                     }
 
+                    if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $True
+
+                        if ($SSHCheckAsJson.Platform -eq "Win32NT") {
+                            $OSDetermination = "Windows"
+                            $ShellDetermination = "pwsh"
+                        }
+                        else {
+                            $OSDetermination = "Linux"
+                            $ShellDetermination = "bash"
+                        }
+
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+
+                    }
+                    if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $False
+
+                        if ($SSHOutputPrep -match "Microsoft|Windows|Win32NT") {
+                            $OSDetermination = "Windows"
+                            if ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Core") {
+                                $ShellDetermination = "pwsh"
+                            }
+                            elseif ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Desktop") {
+                                $ShellDetermination = "powershell"
+                            }
+                            else {
+                                $ShellDetermination = "cmd"
+                            }
+                        }
+                        else {
+                            $OSDetermination = "Linux"
+                            $ShellDetermination = "bash"
+                        }
+
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                        $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+
+                        # Try and setup PSRemoting on the remote host by using 'ssh -t' script
+                        # NOTE: we have $SSHCmdString thanks to the 'TestSSH' private function used above
+                        # $SSHCmdString looks like this:
+                        #   ssh -t zeroadmin@zero@192.168.2.49 "$InstallPwshScript"
+                        [System.Collections.ArrayList][array]$SSHCmdStringPrep = $($SSHCmdString -split "`n")[0..2]
+
+                        if ($OSDetermination -eq "Linux") {
+
+                        }
+
+                        if ($OSDetermination -eq "Windows") {
+
+                        }
+
+
+                    }
+
+                    # If PSRemoting doesn't work...
+
                     # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
                     # sudo password specifically for this user and specifically for running 'sudo pwsh'
                     <#
@@ -1131,9 +1189,11 @@ $PSRemotingCredsPageContent = {
                 }
 
                 if ($Preferred_PSRemotingMethod -eq "SSH") {
-                    New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
-                    Sync-UDElement -Id "CredsForm"
-                    return
+                    if (!$PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingWorks) {
+                        New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
+                        Sync-UDElement -Id "CredsForm"
+                        return
+                    }
                 }
 
                 New-UDInputAction -RedirectUrl "/ToolSelect/$Session:ThisRemoteHost"

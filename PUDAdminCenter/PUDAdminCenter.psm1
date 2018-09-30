@@ -67,6 +67,130 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
 # Public Functions
 
 
+function Configure-PwshRemotingViaSSH {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$True)]
+        [ValidateSet("Windows","Linux")]
+        [string]$Platform,
+
+        [Parameter(Mandatory=$True)]
+        [ValidateSet("pwsh","powershell","cmd","bash")]
+        [string]$Shell,
+
+        [Parameter(Mandatory=$True)]
+        [ValidatePattern("^ssh.*?-t [a-zA-z0-9]+@[a-zA-z0-9]+")]
+        [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> -t <user>@<remotehost>
+    )
+
+    if ($Platform -eq "Linux") {
+        $LinuxCommands = @("curl","wget","sed","systemctl","yum","dnf","apt","zypper","pacman")
+
+        if ($Shell -eq "bash") {
+            # Check for Linux Commands
+            [System.Collections.ArrayList]$CheckCmdScriptPrep = @()
+            foreach ($Cmd in $LinuxCommands) {
+                $null = $CheckCmdScriptPrep.Add("if [ -x `"`$(command -v $Cmd)`" ]; then echo $Cmd; fi")
+            }
+            $CheckCmdScript = $CheckCmdScriptPrep -join "`n"
+
+            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $CheckCmdScript + '"'
+            $PresentLinuxCommands = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
+        }
+        if ($Shell -eq "pwsh") {
+            [System.Collections.ArrayList]$CheckCmdScriptPrep = @()
+            foreach ($Cmd in $LinuxCommands) {
+                $null = $CheckCmdScriptPrep.Add("if ([bool](Get-Command $Cmd -ErrorAction SilentlyContinue)) {'$Cmd'}")
+            }
+            $CheckCmdScript = $CheckCmdScriptPrep -join "`n"
+
+            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $CheckCmdScript + '"'
+            $PresentLinuxCommands = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
+        }
+
+        if ($PresentLinuxCommands -notcontains "curl" -and $PresentLinuxCommands -notcontains "wget") {
+            Write-Error "The Remote Host does not appear to have 'curl' or 'wget' installed! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($PresentLinuxCommands -notcontains "sed") {
+            Write-Error "The Remote Host does not appear to have 'sed' installed! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($PresentLinuxCommands -notcontains "systemctl") {
+            Write-Error "The Remote Host does not appear to use 'systemctl' for managing services! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($PresentLinuxCommands -notmatch "yum|dnf|apt|zypper|pacman") {
+            Write-Error "Unable to identify the package manager on the Remote Host! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        if ($PresentLinuxCommands -contains "curl") {
+            $AddMicrosoftRepo = 'curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo tee /etc/yum.repos.d/microsoft.repo'
+        }
+        elseif ($WgetPresent) {
+            $AddMicrosoftRepo = 'wget -qO- https://packages.microsoft.com/config/rhel/7/prod.repo'
+        }
+        
+        switch ($PresentLinuxCommands) {
+            'yum' {$PwshInstallCmd = "pacman -S powershell --noconfirm"}
+            'dnf' {$PwshInstallCmd = "yum -y install powershell"}
+            'apt' {$PwshInstallCmd = "dnf -y install powershell"}
+            'zypper' {$PwshInstallCmd = "apt -y install powershell"}
+            'pacman' {$PwshInstallCmd = "zypper install powershell --non-interactive"}
+        }
+
+        $InstallPwshScriptPrep = @(
+            $AddMicrosoftRepo
+            $PwshInstallCmd
+            'pscorepath=$(command -v pwsh)'
+            'subsystemline=$(echo \"Subsystem powershell $pscorepath -sshs -NoLogo -NoProfile\")'
+            'if [ $(grep -c "Subsystem.*powershell" /etc/ssh/sshd_config) -gt 0 ]; then echo sshdAlreadyConfigured && exit 1; fi'
+            'sed -i \"s|sftp-server|sftp-server\n$subsystemline|\" /etc/ssh/sshd_config'
+            'systemctl restart sshd'
+        )
+        $InstallPwshScript = "sudo bash -c '" + $($InstallPwshScriptPrep -join "`n") + "'"
+
+        $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $InstallPwshScript + '"'
+        $InstallPwshResult = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
+    }
+
+    if ($Platform -eq "Windows") {
+        if ($Shell -eq "cmd") {
+
+        }
+        if ($Shell -eq "powershell") {
+            $InstallPwshScriptPrep = @(
+                'if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}'
+                'if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}'
+                'Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
+            )
+            $InstallPwshScript = $InstallPwshScriptPrep -join "`n"
+
+            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $InstallPwshScript + '"'
+            $InstallPwshResult = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
+        }
+        if ($Shell -eq "pwsh") {
+            $InstallPwshScriptPrep = @(
+                'if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}'
+                'if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}'
+                'Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
+            )
+            $InstallPwshScript = $InstallPwshScriptPrep -join "`n"
+
+            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $InstallPwshScript + '"'
+            $InstallPwshResult = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
+        }
+    }
+
+    $InstallPwshResult
+}
+
+
 <#
     
     .SYNOPSIS
@@ -4221,6 +4345,64 @@ function Get-PUDAdminCenter {
                             return
                         }
     
+                        if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $True
+    
+                            if ($SSHCheckAsJson.Platform -eq "Win32NT") {
+                                $OSDetermination = "Windows"
+                                $ShellDetermination = "pwsh"
+                            }
+                            else {
+                                $OSDetermination = "Linux"
+                                $ShellDetermination = "bash"
+                            }
+    
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+    
+                        }
+                        if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingOverSSHWorks = $False
+    
+                            if ($SSHOutputPrep -match "Microsoft|Windows|Win32NT") {
+                                $OSDetermination = "Windows"
+                                if ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Core") {
+                                    $ShellDetermination = "pwsh"
+                                }
+                                elseif ($SSHOutputPrep -match "PSEdition" -and $SSHOutputPrep -match "Desktop") {
+                                    $ShellDetermination = "powershell"
+                                }
+                                else {
+                                    $ShellDetermination = "cmd"
+                                }
+                            }
+                            else {
+                                $OSDetermination = "Linux"
+                                $ShellDetermination = "bash"
+                            }
+    
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".OSDetermination = $OSDetermination
+                            $PUDRSSyncHT."$Session:ThisRemoteHost`Info".ShellDetermination = $ShellDetermination
+    
+                            # Try and setup PSRemoting on the remote host by using 'ssh -t' script
+                            # NOTE: we have $SSHCmdString thanks to the 'TestSSH' private function used above
+                            # $SSHCmdString looks like this:
+                            #   ssh -t zeroadmin@zero@192.168.2.49 "$InstallPwshScript"
+                            [System.Collections.ArrayList][array]$SSHCmdStringPrep = $($SSHCmdString -split "`n")[0..2]
+    
+                            if ($OSDetermination -eq "Linux") {
+    
+                            }
+    
+                            if ($OSDetermination -eq "Windows") {
+    
+                            }
+    
+    
+                        }
+    
+                        # If PSRemoting doesn't work...
+    
                         # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
                         # sudo password specifically for this user and specifically for running 'sudo pwsh'
                         <#
@@ -4354,9 +4536,11 @@ function Get-PUDAdminCenter {
                     }
     
                     if ($Preferred_PSRemotingMethod -eq "SSH") {
-                        New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
-                        Sync-UDElement -Id "CredsForm"
-                        return
+                        if (!$PUDRSSyncHT."$Session:ThisRemoteHost`Info".PSRemotingWorks) {
+                            New-UDInputAction -Toast "SSH was SUCCESSFUL, however, ssh functionality has not been fully implemented yet. Please use WinRM instead." -Duration 10000
+                            Sync-UDElement -Id "CredsForm"
+                            return
+                        }
                     }
     
                     New-UDInputAction -RedirectUrl "/ToolSelect/$Session:ThisRemoteHost"
@@ -8105,8 +8289,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUW5zsVsA6t/vDzMKOSqXeJ5bD
-# Raugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUagyjFLJGAEGwKogB7pzVrb6w
+# seOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -8163,11 +8347,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBOcX2ktewPQWMZM
-# ugA4k0YwHLqCMA0GCSqGSIb3DQEBAQUABIIBAGFRM6p/zlzVRcHiodlEvx6wR/Y6
-# ZLy0O8lkaZeznGXFKDuNiOtpXo5OmEROj2JNW4eT8dZjlGQFvgSkPES/Dhk2czri
-# VkCb09Fw47cRgQQLS9ShzrqfGqZVwUCQWSgnR7ZcMjL1xbyV1vKkFiCnx4yECXpa
-# u4E3lKLzRw0EbfGM8cCYy/IaFKRw8auo3XZOyrmHl+0wblztn/e89NuK0c5tsibH
-# Twq4x/BqMptqRUX88Ouf0MFEoMOiFDu4+XOiIFpGz+uf1xhNaJ+wYnjKE4bPnewJ
-# KlfemIZKvh9dCp8nVoczB05A0u1U+G4AKDV3sbMBb76UwapZ0nhN4K0KBpE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFL5XOdoWSOsmO69L
+# KjlI1cCYL9B9MA0GCSqGSIb3DQEBAQUABIIBACbifs01uCQVRWC4nyGDV6x7+My3
+# KpmRmJAsUB9PL3C/x+q//F7489o8OdZJPV1SgdSLxVdXnj2Q7M2ClYwfV8vmqKtJ
+# EFb49kdyKkePQRJ+OZccAwBQguk7sJtVKywVdbk1cYU2JN9IgWcUj0DsA4ReJmkQ
+# lOrXmdSAnm3H6X3yPR0k8Mf2RpoHiUgmgn5e9dAYujfrroAOzfiSRVMLr+hmFvOM
+# 3rV/KUenAkE2kIFC+O5Z2I8R8ETBrZxo1nlJabivBj4EQ+rJKlZFydSHlDf0Jx2a
+# Eb9ZVhvGyRTQD2o2lz1NTzucwQoVi70jvrLd2PIXMwCrqwb0JRXbe68FzNE=
 # SIG # End signature block

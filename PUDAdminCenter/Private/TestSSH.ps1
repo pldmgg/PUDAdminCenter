@@ -113,6 +113,7 @@ function TestSSH {
             $PwshRemoteScriptBlockStringArray = @(
                 '[pscustomobject]@{'
                 '    Output = "ConnectionSuccessful"'
+                '    Platform = $PSVersionTable.Platform'
                 '}'
             ) | foreach {"    $_"}
             $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
@@ -137,7 +138,7 @@ function TestSSH {
                 '"' + $(Get-Command pwsh).Source + '"'
                 "-c {$PwshInvCmdString}"
             )
-            $PwshCmdString = $PwshCmdStringArray -join " "
+            $PwshCmdString = $script:PwshCmdString = $PwshCmdStringArray -join " "
 
             if ($OutputTracker) {
                 if ($OutputTracker.Keys -contains "PwshCmdString") {
@@ -646,8 +647,9 @@ function TestSSH {
             if ($DomainUserName -and $DomainPassword) {
                 $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$RHostIP")
             }
-            $null = $SSHCmdStringArray.Add("`"echo 'ConnectionSuccessful'`"")
-            $SSHCmdString = $SSHCmdStringArray -join " "
+            $SSHScript = 'echo ConnectionSuccessful; dir /; pwsh -NoProfile -Command \"`"$PSVersionTable; dir /\"`"'
+            $null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
+            $SSHCmdString = $script:SSHCmdString = $SSHCmdStringArray -join " "
 
             if ($OutputTracker) {
                 if ($PUDRSSyncHT.Keys -contains "SSHCmdString") {
@@ -943,6 +945,7 @@ function TestSSH {
             $PwshRemoteScriptBlockStringArray = @(
                 '[pscustomobject]@{'
                 '    Output = \"ConnectionSuccessful\"'
+                '    Platform = $PSVersionTable.Platform'
                 '}'
             ) | foreach {"    $_"}
             $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
@@ -966,7 +969,7 @@ function TestSSH {
                 $(Get-Command pwsh).Source
                 "-c {$PwshInvCmdString}"
             )
-            $PwshCmdString = $PwshCmdStringArray -join " "
+            $PwshCmdString = $script:PwshCmdString = $PwshCmdStringArray -join " "
 
             if ($OutputTracker) {
                 if ($OutputTracker.Keys -contains "PwshCmdString") {
@@ -1082,8 +1085,9 @@ function TestSSH {
             if ($DomainUserName -and $DomainPassword) {
                 $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$RHostIP")
             }
-            $null = $SSHCmdStringArray.Add("\`"echo 'ConnectionSuccessful'\`"")
-            $SSHCmdString = $SSHCmdStringArray -join " "
+            $SSHScript = 'echo ConnectionSuccessful; dir /; pwsh -NoProfile -Command \"`"$PSVersionTable; dir /\"`"'
+            $null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
+            $SSHCmdString = $script:SSHCmdString = $SSHCmdStringArray -join " "
 
             if ($OutputTracker) {
                 if ($PUDRSSyncHT.Keys -contains "SSHCmdString") {
@@ -1153,8 +1157,8 @@ function TestSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVnlfo4dcy24JaWBplHqxAWfi
-# W+2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwmFcDkFcUDXtIlA4G8E93OAT
+# fTegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1211,11 +1215,11 @@ function TestSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEYxwx6efFqkeZ3u
-# Yczoqi3QYB1RMA0GCSqGSIb3DQEBAQUABIIBAJTQZQUuutBP5RsyLmF8qZggW60G
-# bc3psM2NZev1VFySshO1EX7g59an3DsWki2oRx7fKskzZlZpnL+xKCuEVlRfPlU8
-# 854hero38u98ojbvxn9vVD3aoQNJA9nhemj/RX7/Yhgw3YVUGhc8HyHAdT0urUIm
-# 999lxa7u/UckoKb+2BKZtLhH3wDRg48gjMuPcNscTV4cyxxFxUDLElItbn4Kg6Z6
-# PcWRJVedS1cFJESqiND7EJ0c/Jchs0Mzxph0TNnihB8x/MPRyt1RjKqgfm3uf8XW
-# s8gtV7UpvaTK8htEybJuIovogO0iSU073RWweyxJVo+k9DW4mDvqsRyzYL8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAcmC/CSV9YclaMC
+# sC26K9NzVqwSMA0GCSqGSIb3DQEBAQUABIIBABhcK6eVcPsBvg54RggLHprcyMBS
+# ufNK8CIojiw0GsJ1Pml81crUkkwVD9871UzoyAiBENSrG/4JXofKAlBHvM53RWeg
+# Fxfjz7Lio3yhQSABZAhjcAQP4s9AIdRvBTH6QErydKMyxf4LQpIG6FFhNDhVFGqR
+# 3Bz0y2LA6McWX5gpPF/t87Zz2a417DWp0LWui4me9enV4I7SXxsL+9ym1OAnJFoK
+# 31eln1R1R3Hf61R4Cy2TocJsVOQ78yyIClfTgWLocZxSkZIllf6XOrhkum6t3A4v
+# Lcj9WpyP94IcVcWZ+hFcunEJTMZlAMsNHPjqIXoPVGqRg0fbLZFcRaCCIIQ=
 # SIG # End signature block
