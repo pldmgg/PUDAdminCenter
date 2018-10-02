@@ -234,7 +234,7 @@ function InitializeSSH {
             $Counter = 0
             while (![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) -and
             ![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("'s password:")) -and 
-            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 10
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 30
             ) {
                 $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                 $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -244,7 +244,7 @@ function InitializeSSH {
                 Start-Sleep -Seconds 1
                 $Counter++
             }
-            if ($Counter -eq 11) {
+            if ($Counter -eq 31) {
                 Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
                 
                 if ($PSAwaitProcess.Id) {
@@ -258,7 +258,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -292,7 +294,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -319,14 +323,14 @@ function InitializeSSH {
                 $Counter = 0
                 while ($SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("Are you sure you want to continue connecting (yes/no)?") -and
                 $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("'s password:") -and 
-                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 10
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 30
                 ) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
+                if ($Counter -eq 31) {
                     Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
                     
                     if ($PSAwaitProcess.Id) {
@@ -340,7 +344,9 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
@@ -376,7 +382,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -401,14 +409,14 @@ function InitializeSSH {
                 $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                 $Counter = 0
                 while (![bool]$($($CheckExpectedSendYesOutput -split "`n") -match [regex]::Escape("'s password:")) -and 
-                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 10
+                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 30
                 ) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
+                if ($Counter -eq 31) {
                     Write-Error "Sending 'yes' to accept the ssh host key timed out!"
                     $global:FunctionResult = "1"
                     
@@ -423,7 +431,9 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
@@ -451,7 +461,7 @@ function InitializeSSH {
                     [System.Collections.ArrayList]$JsonOutputPrep = @()
                     $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     $Counter = 0
-                    while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 10) {
+                    while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 30) {
                         $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                         if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
                             $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -459,9 +469,8 @@ function InitializeSSH {
                         Start-Sleep -Seconds 1
                         $Counter++
                     }
-                    if ($Counter -eq 11) {
-                        Write-Error "Sending the user's password timed out!"
-                        $global:FunctionResult = "1"
+                    if ($Counter -eq 31) {
+                        Write-Verbose "Sending the user's password timed out!"
 
                         if ($PSAwaitProcess.Id) {
                             try {
@@ -474,16 +483,18 @@ function InitializeSSH {
                                     return
                                 }
                                 else {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Stop-Process -Id $PSAwaitProcess.Id
+                                    }
                                     while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                        Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                         Start-Sleep -Seconds 1
                                     }
                                 }
                             }
                         }
 
-                        return
+                        $TrySSHExe = $True
                     }
 
                     [System.Collections.ArrayList]$JsonOutputPrep = $($JsonOutputPrep | foreach {$_ -split "`n"}) | Where-Object {$_ -notmatch "^PS "}
@@ -506,7 +517,7 @@ function InitializeSSH {
                 [System.Collections.ArrayList]$JsonOutputPrep = @()
                 $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                 $Counter = 0
-                while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 10) {
+                while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 30) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
                         $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -514,9 +525,8 @@ function InitializeSSH {
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
-                    Write-Error "Sending the user's password timed out!"
-                    $global:FunctionResult = "1"
+                if ($Counter -eq 31) {
+                    Write-Verbose "Sending the user's password timed out!"
 
                     if ($PSAwaitProcess.Id) {
                         try {
@@ -529,16 +539,18 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
                                 }
                             }
                         }
                     }
 
-                    return
+                    $TrySSHExe = $True
                 }
 
                 [System.Collections.ArrayList]$JsonOutputPrep = $($JsonOutputPrep | foreach {$_ -split "`n"}) | Where-Object {$_ -notmatch "^PS "}
@@ -599,7 +611,9 @@ function InitializeSSH {
                         return
                     }
                     else {
-                        Stop-Process -Id $PSAwaitProcess.Id
+                        if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                        }
                         while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                             Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                             Start-Sleep -Seconds 1
@@ -655,24 +669,22 @@ function InitializeSSH {
                 $null = $SSHCmdStringArray.Add("-i")
                 $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
             }
-            $null = $SSHCmdStringArray.Add("-t")
-            if ($LocalUserName -and $LocalPassword) {
-                $null = $SSHCmdStringArray.Add("$FullUserName@$RHostIP")
+            if ($LocalUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
             }
-            if ($DomainUserName -and $DomainPassword) {
-                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$RHostIP")
+            if ($DomainUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
             }
             $Bytes = [System.Text.Encoding]::Unicode.GetBytes('$PSVersionTable | ConvertTo-Json')
             $EncodedCommandPSVerTable = [Convert]::ToBase64String($Bytes)
             $Bytes = [System.Text.Encoding]::Unicode.GetBytes('"Cim OS Info: " + $(Get-CimInstance Win32_OperatingSystem).Caption')
             $EncodedCommandWinOSCim = [Convert]::ToBase64String($Bytes)
             $SSHScript = @(
-                "echo 111ConnectionTest111"
                 "echo ConnectionSuccessful"
                 "echo 111RootDirInfo111"
                 "dir /"
                 "echo 111ProcessInfo111"
-                "Get-Process -Id `$PID"
+                'Get-Process -Id `$PID'
                 "echo 111PwshJson111"
                 "pwsh -NoProfile -EncodedCommand '$EncodedCommandPSVerTable'"
                 "echo 111PowerShellCimInfo111"
@@ -705,7 +717,7 @@ function InitializeSSH {
             $Counter = 0
             while (![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) -and
             ![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("'s password:")) -and 
-            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 10
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 30
             ) {
                 $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                 $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -715,7 +727,7 @@ function InitializeSSH {
                 Start-Sleep -Seconds 1
                 $Counter++
             }
-            if ($Counter -eq 11) {
+            if ($Counter -eq 31) {
                 Write-Warning "SSH via 'ssh -t ...' timed out!"
                 
                 if ($PSAwaitProcess.Id) {
@@ -729,7 +741,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -759,7 +773,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -786,14 +802,14 @@ function InitializeSSH {
                 $Counter = 0
                 while ($SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("Are you sure you want to continue connecting (yes/no)?") -and
                 $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("'s password:") -and 
-                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 10
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 30
                 ) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
+                if ($Counter -eq 31) {
                     Write-Warning "SSH via 'ssh -t ...' timed out!"
                     
                     if ($PSAwaitProcess.Id) {
@@ -807,7 +823,9 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
@@ -839,7 +857,9 @@ function InitializeSSH {
                             return
                         }
                         else {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id
+                            }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                 Start-Sleep -Seconds 1
@@ -864,14 +884,14 @@ function InitializeSSH {
                 $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                 $Counter = 0
                 while (![bool]$($($CheckExpectedSendYesOutput -split "`n") -match [regex]::Escape("'s password:")) -and 
-                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 10
+                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 30
                 ) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
+                if ($Counter -eq 31) {
                     Write-Error "Sending 'yes' to accept the ssh host key timed out!"
                     $global:FunctionResult = "1"
                     
@@ -886,7 +906,9 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
@@ -914,7 +936,7 @@ function InitializeSSH {
                     [System.Collections.ArrayList]$SSHOutputPrep = @()
                     $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                     $Counter = 0
-                    while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 10) {
+                    while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 30) {
                         $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                         if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
                             $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -922,7 +944,7 @@ function InitializeSSH {
                         Start-Sleep -Seconds 1
                         $Counter++
                     }
-                    if ($Counter -eq 11) {
+                    if ($Counter -eq 31) {
                         Write-Error "Sending the user's password timed out!"
                         $global:FunctionResult = "1"
 
@@ -937,7 +959,9 @@ function InitializeSSH {
                                     return
                                 }
                                 else {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Stop-Process -Id $PSAwaitProcess.Id
+                                    }
                                     while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                         Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                         Start-Sleep -Seconds 1
@@ -964,7 +988,7 @@ function InitializeSSH {
                 [System.Collections.ArrayList]$SSHOutputPrep = @()
                 $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
                 $Counter = 0
-                while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 10) {
+                while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 30) {
                     $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                     if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
                         $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
@@ -972,7 +996,7 @@ function InitializeSSH {
                     Start-Sleep -Seconds 1
                     $Counter++
                 }
-                if ($Counter -eq 11) {
+                if ($Counter -eq 31) {
                     Write-Error "Sending the user's password timed out!"
                     $global:FunctionResult = "1"
 
@@ -987,7 +1011,9 @@ function InitializeSSH {
                                 return
                             }
                             else {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id
+                                }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                                     Start-Sleep -Seconds 1
@@ -1011,7 +1037,9 @@ function InitializeSSH {
                         return
                     }
                     else {
-                        Stop-Process -Id $PSAwaitProcess.Id
+                        if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Stop-Process -Id $PSAwaitProcess.Id
+                        }
                         while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                             Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
                             Start-Sleep -Seconds 1
@@ -1021,29 +1049,31 @@ function InitializeSSH {
             }
 
             if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
-                if ($SSHOutputPrep -match "^ConnectionSuccessful; echo 111RootDirInfo111;") {
+                if ($SSHOutputPrep -match "ConnectionSuccessful; echo 111RootDirInfo111;") {
                     $OSDetermination = "Windows"
                     $ShellDetermination = "cmd"
                     $OSVersionInfo = $null
                 }
-                elseif ($SSHOutputPrep -match "111RootDirInfo111.*Directory:.*[a-zA-Z]:\\") {
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\") {
                     $OSDetermination = "Windows"
-                    if ($SSHOutputPrep -match "111ProcessInfo111.*Name[\s]+:[\s]+powershell") {
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+powershell") {
                         $ShellDetermination = "powershell"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
-                    elseif ("111ProcessInfo111.*Name[\s]+:[\s]+pwsh") {
+                    elseif ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
                         $ShellDetermination = "pwsh"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
                 }
-                elseif ($SSHOutputPrep -match "111RootDirInfo111.*etc " -and !$($SSHOutputPrep -match "111RootDirInfo111.*Directory:.*[a-zA-Z]:\\")) {
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match " etc " -and 
+                !$($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\")
+                ) {
                     $OSDetermination = "Linux"
-                    if ($SSHOutputPrep -match "111ProcessInfo111.*Name[\s]+:[\s]+pwsh") {
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
                         $ShellDetermination = "pwsh"
                     }
                     else {
@@ -1216,24 +1246,22 @@ function InitializeSSH {
                 $null = $SSHCmdStringArray.Add("-i")
                 $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
             }
-            $null = $SSHCmdStringArray.Add("-t")
-            if ($LocalUserName -and $LocalPassword) {
-                $null = $SSHCmdStringArray.Add("$FullUserName@$RHostIP")
+            if ($LocalUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
             }
-            if ($DomainUserName -and $DomainPassword) {
-                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$RHostIP")
+            if ($DomainUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
             }
             $Bytes = [System.Text.Encoding]::Unicode.GetBytes('$PSVersionTable | ConvertTo-Json')
             $EncodedCommandPSVerTable = [Convert]::ToBase64String($Bytes)
             $Bytes = [System.Text.Encoding]::Unicode.GetBytes('"Cim OS Info: " + $(Get-CimInstance Win32_OperatingSystem).Caption')
             $EncodedCommandWinOSCim = [Convert]::ToBase64String($Bytes)
             $SSHScript = @(
-                "echo 111ConnectionTest111"
                 "echo ConnectionSuccessful"
                 "echo 111RootDirInfo111"
                 "dir /"
                 "echo 111ProcessInfo111"
-                "Get-Process -Id `$PID"
+                'Get-Process -Id `$PID'
                 "echo 111PwshJson111"
                 "pwsh -NoProfile -EncodedCommand '$EncodedCommandPSVerTable'"
                 "echo 111PowerShellCimInfo111"
@@ -1274,29 +1302,31 @@ function InitializeSSH {
             $SSHOutputPrep = $ExpectOutput
 
             if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
-                if ($SSHOutputPrep -match "^ConnectionSuccessful; echo 111RootDirInfo111;") {
+                if ($SSHOutputPrep -match "ConnectionSuccessful; echo 111RootDirInfo111;") {
                     $OSDetermination = "Windows"
                     $ShellDetermination = "cmd"
                     $OSVersionInfo = $null
                 }
-                elseif ($SSHOutputPrep -match "111RootDirInfo111.*Directory:.*[a-zA-Z]:\\") {
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\") {
                     $OSDetermination = "Windows"
-                    if ($SSHOutputPrep -match "111ProcessInfo111.*Name[\s]+:[\s]+powershell") {
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+powershell") {
                         $ShellDetermination = "powershell"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
-                    elseif ("111ProcessInfo111.*Name[\s]+:[\s]+pwsh") {
+                    elseif ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
                         $ShellDetermination = "pwsh"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
                 }
-                elseif ($SSHOutputPrep -match "111RootDirInfo111.*etc " -and !$($SSHOutputPrep -match "111RootDirInfo111.*Directory:.*[a-zA-Z]:\\")) {
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match " etc " -and 
+                !$($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\")
+                ) {
                     $OSDetermination = "Linux"
-                    if ($SSHOutputPrep -match "111ProcessInfo111.*Name[\s]+:[\s]+pwsh") {
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
                         $ShellDetermination = "pwsh"
                     }
                     else {
@@ -1327,8 +1357,8 @@ function InitializeSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU04QkZtqrKKVmwCENr5QnsLj0
-# r9agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUw0jept3CqTnQ1zM6F8cw9m1Z
+# YZ2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1385,11 +1415,11 @@ function InitializeSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAc4R0WwdhXSqVYM
-# 5QOssI2Y/vE0MA0GCSqGSIb3DQEBAQUABIIBABXkI2U4zrMu9Mc5DsCeWVLQRB6D
-# sSjM4fd8KtEU6DK4AkIsj7Hw16hMlC5J79UXcGR8csEclGn2S24uW/YON0GTgmrV
-# 0vStmDL2DCgYR2tApKMu1aZIwwQq11D0E7soCknuvyQde8EwoqwSVeZhbaDnV/vc
-# bRuqkh+ccc0/y/EEtUnthjgHhLPzK0E8XqxowJ4AsSYhWJro8AQqr4iFteXC1HbQ
-# oAES/010wf5cr1jqmabAqwS6yyyDEQhawMD8doGkoZNVVXGFCPkGJDegSQXZwx7F
-# p6M/mXpS29zazucA0av/8cM+p5mppHKxCz8IgPu696J5lr6KaTJ5hPKhxzg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOXKXyzwZmSlxByh
+# JYJiNEUsBmKtMA0GCSqGSIb3DQEBAQUABIIBAJ15oH+HQZoPfHKkPM6N/eMtu2dw
+# 4BueXlxECgILfNwtewZU/5NBD0+IqoO3FXE+1L23fzOxFZ4Uc8ksijdzCi/+0F2h
+# mfK4xhw27QrQssr5bV7Uah9KPfLaJWgtu5twD5w9xcmFEogDr4ZPdtDhXMuBtYCu
+# RELDD92yW0yQhuHl05RsL86VmpUA8eXKzjeX2h72VZ7PUfy7NsM3eJmNrPkiJsXt
+# B5gYUbk1szUk+FWhxH9wuQMKR+RFtlp+F4Bl1M5MS17IEUSpdA1yj+9rQYaXsoKm
+# s0zcui0ZIzN/NfrjG1Ssut+LCovO3VJ9z0Vw1UfQRYd+Wh/mA+b4DOyobF8=
 # SIG # End signature block
