@@ -1586,29 +1586,45 @@ function Get-PUDAdminCenter {
                             # NOTE: we have $SSHCmdString thanks to the 'TestSSH' private function used above
                             # $SSHCmdString looks like this:
                             #   ssh -t zeroadmin@zero@192.168.2.49 "$InstallPwshScript"
-                            [System.Collections.ArrayList][array]$SSHCmdStringPrep = $($SSHCmdString -split "`n")[0..2]
-    
-                            if ($OSDetermination -eq "Linux") {
-    
-                            }
+                            [System.Collections.ArrayList][array]$SSHCmdStringSansScript = $($SSHCmdString -split "`n")[0..2]
     
                             if ($OSDetermination -eq "Windows") {
+                                # Sudo is NOT an issue on Windows, so we can install/configure pwsh PSRemoting via SSH immediately.
     
+                                # $($SSHCmdStringSansScript -join " ") should look like this:
+                                #   ssh -t zeroadmin@zero@192.168.2.49
+                                try {
+                                    $null = Configure-PwshRemotingViaSSH -Platform $OSDetermination -Shell $ShellDetermination -SSHCmdOptions $($SSHCmdStringSansScript -join " ") -ErrorAction Stop
+                                }
+                                catch {
+                                    New-UDInputAction -Toast $_.Exception.Message -Duration 10000
+                                    Sync-UDElement -Id "CredsForm"
+                                    return
+                                }
                             }
+                            if ($OSDetermination -eq "Linux") {
+                                # We cannot run 'sudo' in a PSSession on Linux. However, from within a non-elevated pwsh PSSession, we can do something like:
+                                #     $InstallModuleResultPrep = sudo pwsh -c "Install-Module Whatever -Force; Get-Module -ListAvailable Whatever | ConvertTo-Json"
+                                #     $InstallModuleResult = $InstallModuleResultPrep | ConvertFrom-Json
+                                # The problem with this approach is we're still going to be prompted for a sudo password. However, we CAN add some settings to
+                                # /etc/sudoers to allow THIS particular user to run ONLY THE COMMAND 'sudo pwsh -c' without being prompted for a sudo password.
+                                # The setting(s) to do this in /etc/sudoers should look like this...
+                                <#
+                                    Cmnd_Alias SUDO_PWSH = /bin/pwsh
+                                    Defaults!SUDO_PWSH !requiretty
+                                    %zero\\zeroadmin ALL=(ALL) NOPASSWD: SUDO_PWSH
+                                #>
+                                # ... where zero\zeroadmin is the user that we want to give permission to run 'sudo pwsh -c' without being prompted for a password.
     
-    
+                                # First, make sure the user has sudo privileges. If not, we have to fail immediately.
+                                $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
+                                if ($CheckSudoStatusResult -eq "PasswordPrompt") {
+                                    $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
+                                }
+                            }
                         }
     
                         # If PSRemoting doesn't work...
-    
-                        # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
-                        # sudo password specifically for this user and specifically for running 'sudo pwsh'
-                        <#
-                        $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
-                        if ($CheckSudoStatusResult -eq "PasswordPrompt") {
-                            $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
-                        }
-                        #>
                     }
                     if ($Preferred_PSRemotingMethod -eq "WinRM") {
                         [System.Collections.ArrayList]$CredentialsToTest = @()
@@ -2740,8 +2756,8 @@ function Get-PUDAdminCenter {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2Se4oA6GMiTIBsDtrmRNB4LN
-# Rvugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUaYWkbwE8pAjwOJGtw7VQRs6z
+# O9mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -2798,11 +2814,11 @@ function Get-PUDAdminCenter {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDJ2lew8vgScPkYa
-# 0IPZ+DuCp8RQMA0GCSqGSIb3DQEBAQUABIIBAJ8MHBVbIzgbpUCt1HysWcE1RiIZ
-# /pFkzuLCo5rW55cJT/HpzbXrsCDMDZ0Q5b8e7X+dWs4RdqirzhwBVha53Kq2QmZR
-# TsTp1v88m8AdvP+KiBIySfackxyTcYis2hOkfTg2zYbkQq0alcsdU9Mpl6hM/+pz
-# HEbMraJk5XsA85L0R2ncnJtPV5jx0FO+rB3ph6gwKdPEG0HUES04ZmSbabjcx4sH
-# l3eBzpIOh/gi9CGiVNv1gAwhPSOOCEmagEQWsk6dYaFuVr9+CZtFelUU/vmdwSLZ
-# +HcKsvYdjwJVnq4w2CnuIMtORWJrDEoswu4lDoQwZCH9dGQ0mVeXCUPa4FU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFanI1tyft0fPAYH
+# NIGrni/z9ZwJMA0GCSqGSIb3DQEBAQUABIIBAL+ucjVkxjwhUeP2IokNF/wJigdi
+# YjpDmP3aOdryqvONiBuQFpVfymXashQV9wrwfkBWkCjCtF9yy6vpJ7tIiXHivcFF
+# 8FzagHr1oXY7V8cY3VYPvXG9vLITwCbGI3uJaVXw9tEPP59FZ4uvHR0iavqFk0sQ
+# ADtpvdYjuVorxnLk0nJDXgkFm6Ew0mSXOKPiCWtS9Vmfkm/EJUPkeNoY+EcnAZZM
+# op2WKvine2ASdlWZ9QKK0i6xvdFeDZEawNhmfAlk6dXOAkyS+3DUGWCzuRpMIs4i
+# xvrhavJ8lHVjGM7IeWheagsRKMQsHCezYW7U0rcr7yYe5kAyEH2Yi6k0zXo=
 # SIG # End signature block

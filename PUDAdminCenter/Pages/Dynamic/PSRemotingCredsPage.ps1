@@ -1041,29 +1041,45 @@ $PSRemotingCredsPageContent = {
                         # NOTE: we have $SSHCmdString thanks to the 'TestSSH' private function used above
                         # $SSHCmdString looks like this:
                         #   ssh -t zeroadmin@zero@192.168.2.49 "$InstallPwshScript"
-                        [System.Collections.ArrayList][array]$SSHCmdStringPrep = $($SSHCmdString -split "`n")[0..2]
-
-                        if ($OSDetermination -eq "Linux") {
-
-                        }
+                        [System.Collections.ArrayList][array]$SSHCmdStringSansScript = $($SSHCmdString -split "`n")[0..2]
 
                         if ($OSDetermination -eq "Windows") {
+                            # Sudo is NOT an issue on Windows, so we can install/configure pwsh PSRemoting via SSH immediately.
 
+                            # $($SSHCmdStringSansScript -join " ") should look like this:
+                            #   ssh -t zeroadmin@zero@192.168.2.49
+                            try {
+                                $null = Configure-PwshRemotingViaSSH -Platform $OSDetermination -Shell $ShellDetermination -SSHCmdOptions $($SSHCmdStringSansScript -join " ") -ErrorAction Stop
+                            }
+                            catch {
+                                New-UDInputAction -Toast $_.Exception.Message -Duration 10000
+                                Sync-UDElement -Id "CredsForm"
+                                return
+                            }
                         }
+                        if ($OSDetermination -eq "Linux") {
+                            # We cannot run 'sudo' in a PSSession on Linux. However, from within a non-elevated pwsh PSSession, we can do something like:
+                            #     $InstallModuleResultPrep = sudo pwsh -c "Install-Module Whatever -Force; Get-Module -ListAvailable Whatever | ConvertTo-Json"
+                            #     $InstallModuleResult = $InstallModuleResultPrep | ConvertFrom-Json
+                            # The problem with this approach is we're still going to be prompted for a sudo password. However, we CAN add some settings to
+                            # /etc/sudoers to allow THIS particular user to run ONLY THE COMMAND 'sudo pwsh -c' without being prompted for a sudo password.
+                            # The setting(s) to do this in /etc/sudoers should look like this...
+                            <#
+                                Cmnd_Alias SUDO_PWSH = /bin/pwsh
+                                Defaults!SUDO_PWSH !requiretty
+                                %zero\\zeroadmin ALL=(ALL) NOPASSWD: SUDO_PWSH
+                            #>
+                            # ... where zero\zeroadmin is the user that we want to give permission to run 'sudo pwsh -c' without being prompted for a password.
 
-
+                            # First, make sure the user has sudo privileges. If not, we have to fail immediately.
+                            $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
+                            if ($CheckSudoStatusResult -eq "PasswordPrompt") {
+                                $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
+                            }
+                        }
                     }
 
                     # If PSRemoting doesn't work...
-
-                    # At this point, we've accepted the host key if it hasn't been already, and now we need to remove the requirement for a an interactive
-                    # sudo password specifically for this user and specifically for running 'sudo pwsh'
-                    <#
-                    $CheckSudoStatusResult = CheckSudoStatus -UserNameShort -DomainNameShort -RemoteHostName
-                    if ($CheckSudoStatusResult -eq "PasswordPrompt") {
-                        $null = RemoveSudoPwd -UserNameShort -DomainNameShort -RemoteHostName -SudoPwd
-                    }
-                    #>
                 }
                 if ($Preferred_PSRemotingMethod -eq "WinRM") {
                     [System.Collections.ArrayList]$CredentialsToTest = @()

@@ -1,4 +1,4 @@
-function Configure-PwshRemotingViaSSH {
+function Configure-PwshRemotingCrossPlatform {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory=$True)]
@@ -13,6 +13,8 @@ function Configure-PwshRemotingViaSSH {
         [ValidatePattern("^ssh.*?-t [a-zA-z0-9]+@[a-zA-z0-9]+")]
         [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> -t <user>@<remotehost>
     )
+
+    $SSHCmdOptions = $SSHCmdOptions.Trim()
 
     if ($Platform -eq "Linux") {
         $LinuxCommands = @("curl","wget","sed","systemctl","yum","dnf","apt","zypper","pacman")
@@ -92,23 +94,22 @@ function Configure-PwshRemotingViaSSH {
 
     if ($Platform -eq "Windows") {
         if ($Shell -eq "cmd") {
-
-        }
-        if ($Shell -eq "powershell") {
+            # The below works:
+            #ssh -t zeroadmin@zero@zerowin16sshd "powershell -NoProfile -Command `"Install-Module WinSSH; Import-Module WinSSH; Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh`""
             $InstallPwshScriptPrep = @(
-                'if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}'
-                'if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}'
+                "Install-Module WinSSH"
+                "Import-Module WinSSH"
                 'Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
             )
-            $InstallPwshScript = $InstallPwshScriptPrep -join "`n"
+            $InstallPwshScript = $InstallPwshScriptPrep -join "; "
 
-            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + $InstallPwshScript + '"'
+            $FinalSSHCmdString = $SSHCmdOptions + ' ' + '"' + 'powershell -NoProfile -Command `"' + $InstallPwshScript + '`"' + '"'
             $InstallPwshResult = [scriptblock]::Create($FinalSSHCmdString).InvokeReturnAsIs()
         }
-        if ($Shell -eq "pwsh") {
+        if ($Shell -eq "powershell" -or $Shell -eq "pwsh") {
             $InstallPwshScriptPrep = @(
-                'if ($(Get-Module -ListAvailable).Name -notcontains "WinSSH") {$null = Install-Module WinSSH -ErrorAction Stop}'
-                'if ($(Get-Module).Name -notcontains "WinSSH") {$null = Import-Module WinSSH -ErrorAction Stop}'
+                "if (`$(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {`$null = Install-Module WinSSH -ErrorAction Stop}"
+                "if (`$(Get-Module).Name -notcontains 'WinSSH') {`$null = Import-Module WinSSH -ErrorAction Stop}"
                 'Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
             )
             $InstallPwshScript = $InstallPwshScriptPrep -join "`n"
@@ -124,8 +125,8 @@ function Configure-PwshRemotingViaSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+ccjSbaHuIwbvb9d0zF5KcMX
-# dmOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzJQFKYuwyfjLxM7TsWXvDVhr
+# 51Wgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -182,11 +183,11 @@ function Configure-PwshRemotingViaSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMTVAMtn455nteF5
-# VSxFGEkv12wLMA0GCSqGSIb3DQEBAQUABIIBAHc66LKNHljGgNOpYW7ohisbhYXg
-# dxjF4N2qqsoqO9z1OZKB0y3MbQD3YBTeTJ9lpSRyCzjpMSFWkHqqwxmLjlDSX9Cf
-# m1/0E+/WJBufY1iZbzI/Ilz9q9BjUOccAxKohN72ExyE4BuG5MVWZdS+8/w+w8QQ
-# Yib03PqC0XFkxSVLkYpERLP/MlmANYQszjzZca181Y9z+OdOPKjwCdL8aZfLpS1i
-# sLAxl3ZCOLB/bng4RIz50Pnlkqx+WBhCfVPlor1qiXP4t7W7K5ZUFKGvsL1QorFA
-# y8cO7FTGDrg3JQQzr8qRJYVarp9MkfY/ML/85gNEqQA+1St1mk3PW5lGIFw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHObAIOdEw0VSsba
+# IVjwcqGft5joMA0GCSqGSIb3DQEBAQUABIIBAEvqAEsp/7Yak+snGFWuIY/zG4Ev
+# 4fZ5IlFtFDkn6W3De7hgkL1fCFdZSDUWed5f9LBgoNq1qK7c1o7CrUqGDAJy4gCF
+# 5SkoN4qATeyVwy8R1XQyeL7FTRKca3H7CTOL9VEn+K+cBGWMzIce5GzW8FTKEo90
+# IU2OCMtXC+5y7FD0lRawPURu3GgoAj1+oGwIJMJjxbIYP0XNpxrOr2WBnDEGqnC3
+# Vdsz4Eph9b2q7gGYSfJnoGfH4UkS808+Rx+XSvE5S/5ptJMuN4DD+KEdTDc1j1us
+# yxe/xk+F8GE0GY+AasD1uFkqaI8oTIFbzA3SvxjeiVtk2l5qORnshG/V+m8=
 # SIG # End signature block

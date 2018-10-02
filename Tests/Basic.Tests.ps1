@@ -70,6 +70,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'GetNativePath' | Should Be $False
         $Commands -contains 'GetUserObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetWorkingCredentials' | Should Be $False
+        $Commands -contains 'InitializeSSH' | Should Be $False
         $Commands -contains 'InstallFeatureDism' | Should Be $False
         $Commands -contains 'InstallLinuxPackage' | Should Be $False
         $Commands -contains 'InvokeModuleDependencies' | Should Be $False
@@ -84,6 +85,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'TestSSH' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
         
+        $Commands -contains 'Configure-PwshRemotingCrossPlatform' | Should Be $True
         $Commands -contains 'Download-NuGetPackage' | Should Be $True
         $Commands -contains 'Get-CertificateOverview' | Should Be $True
         $Commands -contains 'Get-Certificates' | Should Be $True
@@ -120,6 +122,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Set-RemoteDesktop' | Should Be $True
         $Commands -contains 'Start-DiskPerf' | Should Be $True
         $Commands -contains 'Stop-DiskPerf' | Should Be $True
+        $Commands -contains 'Update-PowerShellCore' | Should Be $True
     }
 
     It "Module '$env:BHProjectName' Private Functions Are Available in Internal Scope" {
@@ -137,6 +140,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:GetNativePath}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetUserObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetWorkingCredentials}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InitializeSSH}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallFeatureDism}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallLinuxPackage}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InvokeModuleDependencies}) | Should Be $True
@@ -156,8 +160,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDRpZuWiE4LEn41dfvjin4yDq
-# NdWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTlu1KEEIcEHhYh0XSw5rkhsj
+# MV2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -214,11 +218,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFD1bV1VKBSova3B7
-# xy7Wa/EHoBnYMA0GCSqGSIb3DQEBAQUABIIBACcUn836siG5pMk9+1JyLeHzrW+L
-# h3IhxyDAW+Bmsas0chDhy1q/KCGmx0PvFydCrXj3/cviwt9owVaF5of17ZQvDcuU
-# sIufca4qngPYkMGtBDCZln6KHs5kIPbKJUy77EdiYAbCPhmJWVTLUJ2JoGxojGf3
-# xNUkylxOJLpjOg5OdOahu1gxwzfUaSyfXVxuKa/taDa67nPcrLG0EDlK3yjnwAIu
-# kRBLu1xHiAbMhsgfqWnk4a0fsZ4Fe1Gk6lNiGUDG0SCBTUOrJ/bxbQ/X6i0COQxv
-# /nTH2O2kt/8r7zAkKJsqzb8TiU3yFDxRegwr4krfsCZfDTIfJzOkxb6gyRU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFHzBEcCBSjWSfeB
+# 2x8RuSVECwX/MA0GCSqGSIb3DQEBAQUABIIBAC8vAqQebxz/cTAGOlSNer7W8dCr
+# Wl9eUBm34HHSJkaLKTNNKV2vKSA9eJW4N2HdwToZwYrz53m+V/x4IoAX/nBkiAgV
+# CkCs7Nr8CR154pJG6YtA0FOSBNqapAxu5IztWU8n9nonrzesDVrjIE7kFvHgAaxw
+# 5xQ9NO41U3hN+fqrVK2FBqEkCgtTbKI7LkoiEkcqt3JVHMFe4DdOOvJRUiacS0bb
+# MNLH2Uq9cUpcxNdlIajk5gaNbaKow1ExASYSZQPZZ2NbVALzxmktP5YAsrXtqGd+
+# vznNQiFhP+gHT75XqngH9yWP3kJkh+dlo0qJpTseni3V2wawM6nwvBu8UZA=
 # SIG # End signature block
