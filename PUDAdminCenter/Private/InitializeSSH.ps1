@@ -1,5 +1,5 @@
 function InitializeSSH {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='Domain')]
     Param (
         [Parameter(Mandatory=$False)]
         [ValidateSet("Windows","Linux")]
@@ -8,19 +8,31 @@ function InitializeSSH {
         [Parameter(Mandatory=$True)]
         [string]$RemoteHostNameOrIP,
 
-        [Parameter(Mandatory=$False)]
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'
+        )]
         [ValidatePattern("\\")] # Must be in format <RemoteHostName>\<User>
         [string]$LocalUserName,
 
-        [Parameter(Mandatory=$False)]
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'    
+        )]
         [ValidatePattern("\\")] # Must be in format <DomainShortName>\<User>
         [string]$DomainUserName,
 
-        [Parameter(Mandatory=$False)]
-        [string]$LocalPassword,
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'    
+        )]
+        [securestring]$LocalPasswordSS,
 
-        [Parameter(Mandatory=$False)]
-        [string]$DomainPassword,
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'
+        )]
+        [securestring]$DomainPasswordSS,
 
         [Parameter(Mandatory=$False)]
         [string]$KeyFilePath,
@@ -32,6 +44,17 @@ function InitializeSSH {
     #region >> Prep
 
     try {
+        if ($(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {$null = Install-Module WinSSH -ErrorAction Stop}
+        if ($(Get-Module).Name -notcontains 'WinSSH') {$null = Import-Module WinSSH -ErrorAction Stop}
+        Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
+    }
+    catch {
+        Write-Error $_
+        $global:FunctionResult = "1"
+        return
+    }
+
+    try {
         $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $RemoteHostNameOrIP -ErrorAction Stop
     }
     catch {
@@ -39,6 +62,32 @@ function InitializeSSH {
         Write-Error "Unable to resolve '$RemoteHostNameOrIP'! Halting!"
         $global:FunctionResult = "1"
         return
+    }
+
+    if ($LocalUserName) {
+        if ($($LocalUserName -split "\\")[0] -ne $RemoteHostNetworkInfo.HostName) {
+            $ErrMsg = "The HostName indicated by -LocalUserName (i.e. $($($LocalUserName -split "\\")[0]) is not the same as " +
+            "the HostName as determined by network resolution (i.e. $($RemoteHostNetworkInfo.HostName))! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if ($DomainUserName) {
+        if ($($DomainUserName -split "\\")[0] -ne $($RemoteHostNetworkInfo.Domain -split "\.")[0]) {
+            $ErrMsg = "The Domain indicated by -DomainUserName (i.e. '$($($DomainUserName -split "\\")[0])') is not the same as " +
+            "the Domain as determined by network resolution (i.e. '$($($RemoteHostNetworkInfo.Domain -split "\.")[0])')! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    if ($LocalPasswordSS) {
+        $LocalPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($LocalPasswordSS))
+    }
+    If ($DomainPasswordSS) {
+        $DomainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainPasswordSS))
     }
 
     if ($PSVersionTable.Platform -eq "Unix") {
@@ -1271,13 +1320,15 @@ function InitializeSSH {
         $global:FunctionResult = "1"
         return
     }
+
+    $FinalOutput
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUhEnXL4pe9hhpSfvnGQTRKsc2
-# g5egggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU04QkZtqrKKVmwCENr5QnsLj0
+# r9agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1334,11 +1385,11 @@ function InitializeSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOfJanMfwKsD77Rs
-# 1wtAgtuejNNPMA0GCSqGSIb3DQEBAQUABIIBAIk+RJ4S4Z7yauDuRe7TEIoHipOP
-# qITfusL1ZnEx/alCJZbIxuefKUKXJdGKQ4V6Hhe+b5NiJSWsEtYmR68ORXkTX8pT
-# 34ZGQDu8oo1eStlsflauouDvA7o58GLUKCkeIQ2EK5vpgxM+Mfu3Q0iTnLIRs+nn
-# gCb/IYfzyKATeIQ4ya9J5qvySReBIx8wiwTUV1ApiiH+tbggP1RSfNEVxzV2+FJu
-# 7HYNrvLu+KtXMq1m2YuTUbhyPlXRDC5EeRhbLVtJ7BKGs/hASAuF4XuPzm4xs+QZ
-# kwcNsob7BeKQ65WhZWbDFAHvV6fOqMNwbOTUHULHvbPIK3MPTO85O3C+Lzo=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAc4R0WwdhXSqVYM
+# 5QOssI2Y/vE0MA0GCSqGSIb3DQEBAQUABIIBABXkI2U4zrMu9Mc5DsCeWVLQRB6D
+# sSjM4fd8KtEU6DK4AkIsj7Hw16hMlC5J79UXcGR8csEclGn2S24uW/YON0GTgmrV
+# 0vStmDL2DCgYR2tApKMu1aZIwwQq11D0E7soCknuvyQde8EwoqwSVeZhbaDnV/vc
+# bRuqkh+ccc0/y/EEtUnthjgHhLPzK0E8XqxowJ4AsSYhWJro8AQqr4iFteXC1HbQ
+# oAES/010wf5cr1jqmabAqwS6yyyDEQhawMD8doGkoZNVVXGFCPkGJDegSQXZwx7F
+# p6M/mXpS29zazucA0av/8cM+p5mppHKxCz8IgPu696J5lr6KaTJ5hPKhxzg=
 # SIG # End signature block
