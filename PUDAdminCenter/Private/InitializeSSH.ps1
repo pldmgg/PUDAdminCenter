@@ -625,6 +625,9 @@ function InitializeSSH {
             if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful") {
                 $TrySSHExe = $True
             }
+
+            # TODO: Remove this after testing finished
+            #$SSHCheckAsJson
             
             # NOTE: The below $ShellDetermination refers to the shell you will (probably) end up in if you use an ssh command, NOT PSRemoting
             if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
@@ -1048,6 +1051,9 @@ function InitializeSSH {
                 }
             }
 
+            # TODO: Remove this after testing finished
+            #$SSHOutputPrep
+
             if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
                 if ($SSHOutputPrep -match "ConnectionSuccessful; echo 111RootDirInfo111;") {
                     $OSDetermination = "Windows"
@@ -1080,7 +1086,13 @@ function InitializeSSH {
                         $ShellDetermination = "bash"
                     }
 
-                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf("111UnameOutput111")
+                    #$SSHOutputPrep | Export-Clixml "$HOME\SSHOutputPrep.xml"
+
+                    $UnameOutputHeader = $($SSHOutputPrep -split "`n") -match "111UnameOutput111"
+                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($UnameOutputHeader)
+                    if ($UnameOutputHeaderIndex -eq "-1") {
+                        $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($UnameOutputHeader[0])
+                    }
                     $OSVersionInfo = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
                 }
 
@@ -1357,8 +1369,8 @@ function InitializeSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUw0jept3CqTnQ1zM6F8cw9m1Z
-# YZ2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4omGAAqjpC2r+O+BNGiE6sCO
+# 6J6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1415,11 +1427,11 @@ function InitializeSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOXKXyzwZmSlxByh
-# JYJiNEUsBmKtMA0GCSqGSIb3DQEBAQUABIIBAJ15oH+HQZoPfHKkPM6N/eMtu2dw
-# 4BueXlxECgILfNwtewZU/5NBD0+IqoO3FXE+1L23fzOxFZ4Uc8ksijdzCi/+0F2h
-# mfK4xhw27QrQssr5bV7Uah9KPfLaJWgtu5twD5w9xcmFEogDr4ZPdtDhXMuBtYCu
-# RELDD92yW0yQhuHl05RsL86VmpUA8eXKzjeX2h72VZ7PUfy7NsM3eJmNrPkiJsXt
-# B5gYUbk1szUk+FWhxH9wuQMKR+RFtlp+F4Bl1M5MS17IEUSpdA1yj+9rQYaXsoKm
-# s0zcui0ZIzN/NfrjG1Ssut+LCovO3VJ9z0Vw1UfQRYd+Wh/mA+b4DOyobF8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJytvMqhsIduVAzU
+# OQGzuOh3jdYuMA0GCSqGSIb3DQEBAQUABIIBACATsYDAgO/HB2Wf+pyAJbXh1CjK
+# cCkoArqPbzd+RhfhmZ+ItLXJoXVYBJQC2/N+hVQPWimI8bnN9nbjz3kOWKjXv4Je
+# HoIQI1r2Qmh8iC8X8D5e8OOi5DqOZ+jayYfCaryMDV/BB6mHODjAC/VFJymZI+iR
+# MrszotNw15FTgCwQU67vOrbwn2NtxMXGnV29M1V+TDErVsDDU6i3Zq6OaaA9v1uT
+# GCdgd0M/eyodWUyUl1WdVWA57UrWXznfh3lELeMOqXxJPoyqmZBYEGBJuMhrjsOI
+# JADtGiIMjd1iN6aGaiue7hlf4dYgBej9Ma2YWtYCu0/cUpN2OdUgTXbvMEs=
 # SIG # End signature block
