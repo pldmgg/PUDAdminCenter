@@ -80,7 +80,7 @@ function Configure-PwshRemotingCrossPlatform {
 
         [Parameter(Mandatory=$True)]
         [ValidatePattern("^ssh.*?-t [a-zA-z0-9]+@[a-zA-z0-9]+")]
-        [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> -t <user>@<remotehost>
+        [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> <user>@<remotehost>
     )
 
     $SSHCmdOptions = $SSHCmdOptions.Trim()
@@ -6200,6 +6200,1433 @@ function Get-ServerInventory {
 }
 
 
+function Get-SSHProbe {
+    [CmdletBinding(DefaultParameterSetName='Domain')]
+    Param (
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("Windows","Linux")]
+        [string]$RemoteOSGuess = "Windows",
+
+        [Parameter(Mandatory=$True)]
+        [string]$RemoteHostNameOrIP,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'
+        )]
+        [ValidatePattern("\\")] # Must be in format <RemoteHostName>\<User>
+        [string]$LocalUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'    
+        )]
+        [ValidatePattern("\\")] # Must be in format <DomainShortName>\<User>
+        [string]$DomainUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'    
+        )]
+        [securestring]$LocalPasswordSS,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'
+        )]
+        [securestring]$DomainPasswordSS,
+
+        [Parameter(Mandatory=$False)]
+        [string]$KeyFilePath,
+
+        [Parameter(Mandatory=$False)]
+        [string]$OutputTracker
+    )
+
+    #region >> Prep
+
+    try {
+        $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $RemoteHostNameOrIP -ErrorAction Stop
+    }
+    catch {
+        Write-Error $_
+        Write-Error "Unable to resolve '$RemoteHostNameOrIP'! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    if ($LocalUserName) {
+        if ($($LocalUserName -split "\\")[0] -ne $RemoteHostNetworkInfo.HostName) {
+            $ErrMsg = "The HostName indicated by -LocalUserName (i.e. $($($LocalUserName -split "\\")[0]) is not the same as " +
+            "the HostName as determined by network resolution (i.e. $($RemoteHostNetworkInfo.HostName))! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if ($DomainUserName) {
+        if ($($DomainUserName -split "\\")[0] -ne $($RemoteHostNetworkInfo.Domain -split "\.")[0]) {
+            $ErrMsg = "The Domain indicated by -DomainUserName (i.e. '$($($DomainUserName -split "\\")[0])') is not the same as " +
+            "the Domain as determined by network resolution (i.e. '$($($RemoteHostNetworkInfo.Domain -split "\.")[0])')! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    if ($LocalPasswordSS) {
+        $LocalPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($LocalPasswordSS))
+    }
+    If ($DomainPasswordSS) {
+        $DomainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainPasswordSS))
+    }
+
+    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+        try {
+            if ($(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {$null = Install-Module WinSSH -ErrorAction Stop}
+            if ($(Get-Module).Name -notcontains 'WinSSH') {$null = Import-Module WinSSH -ErrorAction Stop}
+            Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    if ($PSVersionTable.Platform -eq "Unix") {
+        # Determine if we have the required Linux commands
+        [System.Collections.ArrayList]$LinuxCommands = @(
+            "echo"
+            "expect"
+        )
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+
+        if ($CommandsNotPresent.Count -gt 0) {
+            [System.Collections.ArrayList]$FailedInstalls = @()
+            if ($CommandsNotPresent -contains "echo") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "coreutils" -CommandName "echo"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("coreutils")
+                }
+            }
+            if ($CommandsNotPresent -contains "expect") {
+                try {
+                    $null = InstallLinuxPackage -PossiblePackageNames "expect" -CommandName "expect"
+                }
+                catch {
+                    $null = $FailedInstalls.Add("expect")
+                }
+            }
+    
+            if ($FailedInstalls.Count -gt 0) {
+                Write-Error "The following Linux packages are required, but were not able to be installed:`n$($FailedInstalls -join "`n")`nHalting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        [System.Collections.ArrayList]$CommandsNotPresent = @()
+        foreach ($CommandName in $LinuxCommands) {
+            $CommandCheckResult = command -v $CommandName
+            if (!$CommandCheckResult) {
+                $null = $CommandsNotPresent.Add($CommandName)
+            }
+        }
+    
+        if ($CommandsNotPresent.Count -gt 0) {
+            Write-Error "The following Linux commands are required, but not present on $env:ComputerName:`n$($CommandsNotPresent -join "`n")`nHalting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    $TrySSHExe = $False
+
+    #endregion >> Prep
+    
+    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+        if ($RemoteOSGuess -eq "Windows") {
+            if ($LocalUserName) {
+                $FullUserName = $LocalUserName
+            }
+            if ($DomainUserName) {
+                $FullUserName = $DomainUserName
+            }
+
+            if ($RemoteHostNetworkInfo.FQDN -match "unknown") {
+                $HostNameValue = @(
+                    $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+                )[0]
+            }
+            else {
+                $HostNameValue = $RemoteHostNetworkInfo.FQDN
+            }
+
+            # Install pwsh if it isn't already
+            if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
+                try {
+                    if ($(Get-Module -ListAvailable).Name -notcontains 'ProgramManagement') {$null = Install-Module ProgramManagement -ErrorAction Stop}
+                    if ($(Get-Module).Name -notcontains 'ProgramManagement') {$null = Import-Module ProgramManagement -ErrorAction Stop}
+                    $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe
+                }
+                catch {
+                    Write-Error $_
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+
+            # This is basically what we're going for with the below string manipulation:
+            #   & pwsh -c {Invoke-Command -HostName zerowin16sshb -KeyFilePath "$HOME\.ssh\zeroadmin_090618-cert.pub" -ScriptBlock {[pscustomobject]@{Output = "ConnectionSuccessful"}} | ConvertTo-Json}
+            $PwshRemoteScriptBlockStringArray = @(
+                '[pscustomobject]@{'
+                '    Output = "ConnectionSuccessful"'
+                '    Platform = $PSVersionTable.Platform'
+                '    DistroInfo = $PSVersionTable.OS'
+                '    Hostnamectl = hostnamectl'
+                '}'
+            ) | foreach {"    $_"}
+            $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
+            [System.Collections.ArrayList]$PwshInvCmdStringArray = @(
+                'Invoke-Command'
+                '-HostName'
+                $HostNameValue
+                '-UserName'
+                $FullUserName
+            )
+            if ($KeyFilePath) {
+                $null = $PwshInvCmdStringArray.Add('-KeyFilePath')
+                $null = $PwshInvCmdStringArray.Add("'$KeyFilePath'")
+            }
+            $null = $PwshInvCmdStringArray.Add('-HideComputerName')
+            $null = $PwshInvCmdStringArray.Add("-ScriptBlock {`n$PwshRemoteScriptBlockString`n}")
+            $null = $PwshInvCmdStringArray.Add('|')
+            $null = $PwshInvCmdStringArray.Add('ConvertTo-Json')
+            $PwshInvCmdString = $PwshInvCmdStringArray -join " "
+            $PwshCmdStringArray = @(
+                '&'
+                '"' + $(Get-Command pwsh).Source + '"'
+                "-c {$PwshInvCmdString}"
+            )
+            $PwshCmdString = $script:PwshCmdString = $PwshCmdStringArray -join " "
+
+            #region >> Await Attempt Number 1 of 2
+            
+            $null = Start-AwaitSession
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
+            $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand "`$env:Path = '$env:Path'"
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand -Command $([scriptblock]::Create($PwshCmdString))
+            Start-Sleep -Seconds 5
+
+            # This will either not prompt at all, prompt to accept the RemoteHost's RSA Host Key, or prompt for a password
+            $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+            [System.Collections.ArrayList]$CheckForExpectedResponses = @()
+            $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+            $Counter = 0
+            while (![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) -and
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("'s password:")) -and 
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 30
+            ) {
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]") {
+                    break
+                }
+                Start-Sleep -Seconds 1
+                $Counter++
+            }
+            if ($Counter -eq 31) {
+                Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
+                
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+            }
+            #endregion >> Await Attempt 1 of 2
+
+            $CheckResponsesOutput = $CheckForExpectedResponses | foreach {$_ -split "`n"}
+            # Make sure we didn't already throw an error related to the Remote Host not having PowerShell Remoting configured
+            if ($CheckResponsesOutput -match "background process reported an error") {
+                $TrySSHExe = $True
+            }
+
+            #region >> Await Attempt 2 of 2
+            
+            # If $CheckResponsesOutput contains the string "must be greater than zero", then something broke with the Await Module.
+            # Most of the time, just trying again resolves any issues
+            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+
+                $null = Start-AwaitSession
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
+                $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand "`$env:Path = '$env:Path'"
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand -Command $([scriptblock]::Create($PwshCmdString))
+                Start-Sleep -Seconds 5
+
+                # This will either not prompt at all, prompt to accept the RemoteHost's RSA Host Key, or prompt for a password
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$CheckForExpectedResponses = @()
+                $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while ($SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("Are you sure you want to continue connecting (yes/no)?") -and
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("'s password:") -and 
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 30
+                ) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
+                    
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            #endregion >> Await Attempt 2 of 2
+
+            $CheckResponsesOutput = $CheckForExpectedResponses | foreach {$_ -split "`n"}
+            # Make sure we didn't already throw an error related to the Remote Host not having PowerShell Remoting configured
+            if ($CheckResponsesOutput -match "background process reported an error") {
+                $TrySSHExe = $True
+            }
+
+            # At this point, if we don't have the expected output, we need to fail
+            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
+                Write-Error "Something went wrong with the PowerShell Await Module! Halting!"
+                $global:FunctionResult = "1"
+
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+
+                return
+            }
+
+            # Now we should either have a prompt to accept the host key, a prompt for a password, or it already worked...
+
+            if ($CheckResponsesOutput -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) {
+                $null = Send-AwaitCommand "yes"
+                Start-Sleep -Seconds 3
+                
+                # This will either not prompt at all or prompt for a password
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$CheckExpectedSendYesOutput = @()
+                $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while (![bool]$($($CheckExpectedSendYesOutput -split "`n") -match [regex]::Escape("'s password:")) -and 
+                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 30
+                ) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Error "Sending 'yes' to accept the ssh host key timed out!"
+                    $global:FunctionResult = "1"
+                    
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+
+                    return
+                }
+
+                $CheckSendYesOutput = $CheckExpectedSendYesOutput | foreach {$_ -split "`n"}
+                
+                if ($CheckSendYesOutput -match [regex]::Escape("'s password:")) {
+                    if ($LocalPassword) {
+                        $null = Send-AwaitCommand $LocalPassword
+                    }
+                    if ($DomainPassword) {
+                        $null = Send-AwaitCommand $DomainPassword
+                    }
+                    Start-Sleep -Seconds 3
+
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                    [System.Collections.ArrayList]$JsonOutputPrep = @()
+                    $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    $Counter = 0
+                    while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 30) {
+                        $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                        if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
+                            $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                        }
+                        Start-Sleep -Seconds 1
+                        $Counter++
+                    }
+                    if ($Counter -eq 31) {
+                        Write-Verbose "Sending the user's password timed out!"
+
+                        if ($PSAwaitProcess.Id) {
+                            try {
+                                $null = Stop-AwaitSession
+                            }
+                            catch {
+                                if ($PSAwaitProcess.Id -eq $PID) {
+                                    Write-Error "The PSAwaitSession never spawned! Halting!"
+                                    $global:FunctionResult = "1"
+                                    return
+                                }
+                                else {
+                                    if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                    }
+                                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                        Start-Sleep -Seconds 1
+                                    }
+                                }
+                            }
+                        }
+
+                        $TrySSHExe = $True
+                    }
+
+                    [System.Collections.ArrayList]$JsonOutputPrep = $($JsonOutputPrep | foreach {$_ -split "`n"}) | Where-Object {$_ -notmatch "^PS "}
+                    if (![bool]$($JsonOutputPrep[0] -match "^{")) {
+                        $null = $JsonOutputPrep.Insert(0,'{')
+                    }
+                }
+            }
+            elseif ($CheckResponsesOutput -match [regex]::Escape("'s password:")) {
+                if ($LocalPassword) {
+                    $null = Send-AwaitCommand $LocalPassword
+                }
+                if ($DomainPassword) {
+                    $null = Send-AwaitCommand $DomainPassword
+                }
+                Start-Sleep -Seconds 3
+
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$JsonOutputPrep = @()
+                $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while (![bool]$($($JsonOutputPrep -split "`n") -match "^}") -and $Counter -le 30) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
+                        $null = $JsonOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    }
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Verbose "Sending the user's password timed out!"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+
+                    $TrySSHExe = $True
+                }
+
+                [System.Collections.ArrayList]$JsonOutputPrep = $($JsonOutputPrep | foreach {$_ -split "`n"}) | Where-Object {$_ -notmatch "^PS "}
+                if (![bool]$($JsonOutputPrep[0] -match "^{")) {
+                    $null = $JsonOutputPrep.Insert(0,'{')
+                }
+            }
+            else {
+                [System.Collections.ArrayList]$JsonOutputPrep = $($CheckResponsesOutput | foreach {$_ -split "`n"}) | Where-Object {
+                    $_ -notmatch "^PS " -and ![System.String]::IsNullOrWhiteSpace($_)
+                }
+                $EndOfInputLineContent = $JsonOutputPrep -match [regex]::Escape("ConvertTo-Json}")
+                $JsonOutputIndex = $JsonOutputPrep.IndexOf($EndOfInputLineContent) + 1
+
+                [System.Collections.ArrayList]$JsonOutputPrep = $JsonOutputPrep[$JsonOutputIndex..$($JsonOutputPrep.Count-1)]
+
+                if (![bool]$($JsonOutputPrep[0] -match "^{")) {
+                    $null = $JsonOutputPrep.Insert(0,'{')
+                }
+            }
+
+            if (!$TrySSHExe) {
+                $IndexesOfOpenBracket = for ($i=0; $i -lt $JsonOutputPrep.Count; $i++) {
+                    if ($JsonOutputPrep[$i] -match "^{") {
+                        $i
+                    }
+                }
+                $LastIndexOfOpenBracket = $($IndexesOfOpenBracket | Measure-Object -Maximum).Maximum
+                $IndexesOfCloseBracket = for ($i=0; $i -lt $JsonOutputPrep.Count; $i++) {
+                    if ($JsonOutputPrep[$i] -match "^}") {
+                        $i
+                    }
+                }
+                $LastIndexOfCloseBracket = $($IndexesOfCloseBracket | Measure-Object -Maximum).Maximum
+                [System.Collections.ArrayList]$JsonOutputPrep = $JsonOutputPrep[$LastIndexOfOpenBracket..$LastIndexOfCloseBracket] | foreach {$_ -split "`n"}
+                if (![bool]$($JsonOutputPrep[0] -match "^{")) {
+                    $null = $JsonOutputPrep.Insert(0,'{')
+                }
+
+                $FinalJson = $JsonOutputPrep | foreach {if (![System.String]::IsNullOrWhiteSpace($_)) {$_.Trim()}}
+
+                try {
+                    $SSHCheckAsJson = $FinalJson | ConvertFrom-Json
+                }
+                catch {
+                    $TrySSHExe = $True
+                }
+            }
+
+            if ($PSAwaitProcess.Id) {
+                try {
+                    $null = Stop-AwaitSession
+                }
+                catch {
+                    if ($PSAwaitProcess.Id -eq $PID) {
+                        Write-Error "The PSAwaitSession never spawned! Halting!"
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                    else {
+                        if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                        }
+                        while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                            Start-Sleep -Seconds 1
+                        }
+                    }
+                }
+            }
+
+            if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful") {
+                $TrySSHExe = $True
+            }
+
+            # TODO: Remove this after testing finished
+            #$SSHCheckAsJson
+            
+            # NOTE: The below $ShellDetermination refers to the shell you will (probably) end up in if you use an ssh command, NOT PSRemoting
+            if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
+                if ($SSHCheckAsJson.Platform -eq "Win32NT") {
+                    $OSDetermination = "Windows"
+                    $ShellDetermination = "pwsh"
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
+                }
+                else {
+                    $OSDetermination = "Linux"
+                    $ShellDetermination = "pwsh"
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
+                }
+
+                $FinalOutput = [pscustomobject]@{
+                    OS              = $OSDetermination
+                    Shell           = $ShellDetermination
+                    OSVersionInfo   = $OSVersionInfo
+                }
+            }
+        }
+
+        if ($RemoteOSGuess -eq "Linux" -or $TrySSHExe) {
+            if ($LocalUserName) {
+                $FullUserName = $($LocalUserName -split "\\")[-1]
+            }
+            if ($DomainUserName) {
+                $DomainNameShort = $($DomainUserName -split "\\")[0]
+                $FullUserName = $($DomainUserName -split "\\")[-1]
+            }
+
+            $HostNameValue = $RHostIP = @(
+                $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+            )[0]
+
+            # This is what we're going for:
+            #     ssh -t pdadmin@192.168.2.10 "echo 'ConnectionSuccessful'"
+            [System.Collections.ArrayList]$SSHCmdStringArray = @(
+                'ssh'
+            )
+            if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+                $null = $SSHCmdStringArray.Add("-i")
+                $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
+            }
+            if ($LocalUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
+            }
+            if ($DomainUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
+            }
+            $Bytes = [System.Text.Encoding]::Unicode.GetBytes('$PSVersionTable | ConvertTo-Json')
+            $EncodedCommandPSVerTable = [Convert]::ToBase64String($Bytes)
+            $Bytes = [System.Text.Encoding]::Unicode.GetBytes('"Cim OS Info: " + $(Get-CimInstance Win32_OperatingSystem).Caption')
+            $EncodedCommandWinOSCim = [Convert]::ToBase64String($Bytes)
+            $SSHScript = @(
+                "echo ConnectionSuccessful"
+                "echo 111RootDirInfo111"
+                "cd /"
+                "dir"
+                "echo 111ProcessInfo111"
+                'Get-Process -Id `$PID'
+                "echo 111PwshJson111"
+                "pwsh -NoProfile -EncodedCommand $EncodedCommandPSVerTable"
+                "echo 111PowerShellCimInfo111"
+                "powershell -NoProfile -EncodedCommand $EncodedCommandWinOSCim"
+                "echo 111UnameOutput111"
+                "uname -a"
+                "echo 111HostnamectlOutput111"
+                "hostnamectl"
+            )
+            $SSHScript = $SSHScript -join "; "
+            $null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
+            # NOTE: The below -replace regex string removes garbage escape sequences like: [116;1H
+            $SSHCmdString = $script:SSHCmdString = '@($(' + $($SSHCmdStringArray -join " ") + ') -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]","") 2>$null'
+
+            #region >> Await Attempt Number 1 of 2
+            
+            $null = Start-AwaitSession
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
+            $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand "`$env:Path = '$env:Path'"
+            Start-Sleep -Seconds 1
+            $null = Send-AwaitCommand -Command $([scriptblock]::Create($SSHCmdString))
+            Start-Sleep -Seconds 5
+
+            # This will either not prompt at all, prompt to accept the RemoteHost's RSA Host Key, or prompt for a password
+            $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+            [System.Collections.ArrayList]$CheckForExpectedResponses = @()
+            $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+            $Counter = 0
+            while (![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) -and
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match [regex]::Escape("'s password:")) -and 
+            ![bool]$($($CheckForExpectedResponses -split "`n") -match "^}") -and $Counter -le 30
+            ) {
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]") {
+                    break
+                }
+                Start-Sleep -Seconds 1
+                $Counter++
+            }
+            if ($Counter -eq 31) {
+                Write-Warning "SSH via 'ssh -t ...' timed out!"
+                
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+            }
+            #endregion >> Await Attempt 1 of 2
+
+            $CheckResponsesOutput = $CheckForExpectedResponses | foreach {$_ -split "`n"}
+            
+            #region >> Await Attempt 2 of 2
+            
+            # If $CheckResponsesOutput contains the string "must be greater than zero", then something broke with the Await Module.
+            # Most of the time, just trying again resolves any issues
+            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+
+                $null = Start-AwaitSession
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
+                $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand "`$env:Path = '$env:Path'"
+                Start-Sleep -Seconds 1
+                $null = Send-AwaitCommand -Command $([scriptblock]::Create($SSHCmdString))
+                Start-Sleep -Seconds 5
+
+                # This will either not prompt at all, prompt to accept the RemoteHost's RSA Host Key, or prompt for a password
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$CheckForExpectedResponses = @()
+                $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while ($SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("Are you sure you want to continue connecting (yes/no)?") -and
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch [regex]::Escape("'s password:") -and 
+                $SuccessOrAcceptHostKeyOrPwdPrompt -notmatch "^}" -and $Counter -le 30
+                ) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Warning "SSH via 'ssh -t ...' timed out!"
+                    
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            #endregion >> Await Attempt 2 of 2
+
+            $CheckResponsesOutput = $CheckForExpectedResponses | foreach {$_ -split "`n"}
+
+            # At this point, if we don't have the expected output, we need to fail
+            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
+                Write-Error "Something went wrong with the PowerShell Await Module! Halting!"
+                $global:FunctionResult = "1"
+
+                if ($PSAwaitProcess.Id) {
+                    try {
+                        $null = Stop-AwaitSession
+                    }
+                    catch {
+                        if ($PSAwaitProcess.Id -eq $PID) {
+                            Write-Error "The PSAwaitSession never spawned! Halting!"
+                            $global:FunctionResult = "1"
+                            return
+                        }
+                        else {
+                            if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                            }
+                            while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                Start-Sleep -Seconds 1
+                            }
+                        }
+                    }
+                }
+
+                return
+            }
+
+            # Now we should either have a prompt to accept the host key, a prompt for a password, or it already worked...
+
+            if ($CheckResponsesOutput -match [regex]::Escape("Are you sure you want to continue connecting (yes/no)?")) {
+                $null = Send-AwaitCommand "yes"
+                Start-Sleep -Seconds 3
+                
+                # This will either not prompt at all or prompt for a password
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$CheckExpectedSendYesOutput = @()
+                $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while (![bool]$($($CheckExpectedSendYesOutput -split "`n") -match [regex]::Escape("'s password:")) -and 
+                ![bool]$($($CheckExpectedSendYesOutput -split "`n") -match "^}") -and $Counter -le 30
+                ) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    $null = $CheckExpectedSendYesOutput.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Error "Sending 'yes' to accept the ssh host key timed out!"
+                    $global:FunctionResult = "1"
+                    
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+
+                    return
+                }
+
+                $CheckSendYesOutput = $CheckExpectedSendYesOutput | foreach {$_ -split "`n"}
+                
+                if ($CheckSendYesOutput -match [regex]::Escape("'s password:")) {
+                    if ($LocalPassword) {
+                        $null = Send-AwaitCommand $LocalPassword
+                    }
+                    if ($DomainPassword) {
+                        $null = Send-AwaitCommand $DomainPassword
+                    }
+                    Start-Sleep -Seconds 3
+
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                    [System.Collections.ArrayList]$SSHOutputPrep = @()
+                    $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    $Counter = 0
+                    while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 30) {
+                        $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                        if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
+                            $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                        }
+                        Start-Sleep -Seconds 1
+                        $Counter++
+                    }
+                    if ($Counter -eq 31) {
+                        Write-Error "Sending the user's password timed out!"
+                        $global:FunctionResult = "1"
+
+                        if ($PSAwaitProcess.Id) {
+                            try {
+                                $null = Stop-AwaitSession
+                            }
+                            catch {
+                                if ($PSAwaitProcess.Id -eq $PID) {
+                                    Write-Error "The PSAwaitSession never spawned! Halting!"
+                                    $global:FunctionResult = "1"
+                                    return
+                                }
+                                else {
+                                    if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                    }
+                                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                        Start-Sleep -Seconds 1
+                                    }
+                                }
+                            }
+                        }
+
+                        return
+                    }
+                }
+            }
+            elseif ($CheckResponsesOutput -match [regex]::Escape("'s password:")) {
+                if ($LocalPassword) {
+                    $null = Send-AwaitCommand $LocalPassword
+                }
+                if ($DomainPassword) {
+                    $null = Send-AwaitCommand $DomainPassword
+                }
+                Start-Sleep -Seconds 3
+
+                $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+
+                [System.Collections.ArrayList]$SSHOutputPrep = @()
+                $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                $Counter = 0
+                while (![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful") -and $Counter -le 30) {
+                    $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
+                    if (![System.String]::IsNullOrWhiteSpace($SuccessOrAcceptHostKeyOrPwdPrompt)) {
+                        $null = $SSHOutputPrep.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
+                    }
+                    Start-Sleep -Seconds 1
+                    $Counter++
+                }
+                if ($Counter -eq 31) {
+                    Write-Error "Sending the user's password timed out!"
+                    $global:FunctionResult = "1"
+
+                    if ($PSAwaitProcess.Id) {
+                        try {
+                            $null = Stop-AwaitSession
+                        }
+                        catch {
+                            if ($PSAwaitProcess.Id -eq $PID) {
+                                Write-Error "The PSAwaitSession never spawned! Halting!"
+                                $global:FunctionResult = "1"
+                                return
+                            }
+                            else {
+                                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                                }
+                                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                                    Start-Sleep -Seconds 1
+                                }
+                            }
+                        }
+                    }
+
+                    return
+                }
+            }
+
+            if ($PSAwaitProcess.Id) {
+                try {
+                    $null = Stop-AwaitSession
+                }
+                catch {
+                    if ($PSAwaitProcess.Id -eq $PID) {
+                        Write-Error "The PSAwaitSession never spawned! Halting!"
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                    else {
+                        if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                        }
+                        while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                            Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                            Start-Sleep -Seconds 1
+                        }
+                    }
+                }
+            }
+
+            # TODO: Remove this after testing finished
+            #$SSHOutputPrep
+
+            if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+                if ($SSHOutputPrep -match "ConnectionSuccessful; echo 111RootDirInfo111;") {
+                    $OSDetermination = "Windows"
+                    $ShellDetermination = "cmd"
+                    $OSVersionInfo = $null
+                }
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\") {
+                    $OSDetermination = "Windows"
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+powershell") {
+                        $ShellDetermination = "powershell"
+                        # The below $OSVersionInfo will be a string that looks something like:
+                        #   Microsoft Windows Server 2016 Standard Evaluation
+                        $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
+                    }
+                    elseif ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
+                        $ShellDetermination = "pwsh"
+                        # The below $OSVersionInfo will be a string that looks something like:
+                        #   Microsoft Windows Server 2016 Standard Evaluation
+                        $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
+                    }
+                }
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match " etc " -and 
+                !$($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\")
+                ) {
+                    $OSDetermination = "Linux"
+                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
+                        $ShellDetermination = "pwsh"
+                    }
+                    else {
+                        $ShellDetermination = "bash"
+                    }
+
+                    #$SSHOutputPrep | Export-Clixml "$HOME\SSHOutputPrep.xml"
+
+                    $UnameOutputHeader = $($SSHOutputPrep -split "`n") -match "111UnameOutput111"
+                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($UnameOutputHeader)
+                    if ($UnameOutputHeaderIndex -eq "-1") {
+                        $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($UnameOutputHeader[0])
+                    }
+                    $UnameOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $HostnamectlOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 2)..$($($SSHOutputPrep -split "`n").Count-1)]
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($UnameOutput) {
+                        $null = $OSVersionInfo.Add($UnameOutput)
+                    }
+                    if ($HostnamectlOutput) {
+                        $null = $OSVersionInfo.Add($HostnamectlOutput)
+                    }
+                }
+
+                $FinalOutput = [pscustomobject]@{
+                    OS              = $OSDetermination
+                    Shell           = $ShellDetermination
+                    OSVersionInfo   = $OSVersionInfo
+                }
+            }
+        }
+
+        if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful" -and ![bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+            Write-Error "SSH attempts via PowerShell Core 'Invoke-Command' and ssh.exe have failed!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    elseif ($PSVersionTable.Platform -eq "Unix") {
+        if ($RemoteOSGuess -eq "Windows") {
+            if ($LocalUserName) {
+                $FullUserName = $LocalUserName
+            }
+            if ($DomainUserName) {
+                $FullUserName = $DomainUserName
+            }
+
+            if ($RemoteHostNetworkInfo.FQDN -match "unknown") {
+                $HostNameValue = @(
+                    $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+                )[0]
+            }
+            else {
+                $HostNameValue = $RemoteHostNetworkInfo.FQDN
+            }
+
+            # This is basically what we're going for with the below string manipulation:
+            #   & pwsh -c {Invoke-Command -HostName zerowin16sshb -KeyFilePath "$HOME\.ssh\zeroadmin_090618-cert.pub" -ScriptBlock {[pscustomobject]@{Output = "ConnectionSuccessful"}} | ConvertTo-Json}
+            $PwshRemoteScriptBlockStringArray = @(
+                '[pscustomobject]@{'
+                '    Output = \"ConnectionSuccessful\"'
+                '    Platform = (Get-Variable PSVersionTable -ValueOnly).Platform'
+                '    DistroInfo = (Get-Variable PSVersionTable -ValueOnly).OS'
+                '    Hostnamectl = hostnamectl'
+                '}'
+            ) | foreach {"    $_"}
+            $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
+            [System.Collections.ArrayList]$PwshInvCmdStringArray = @(
+                'Invoke-Command'
+                '-HostName'
+                $HostNameValue
+                '-UserName'
+                $FullUserName
+            )
+            if ($KeyFilePath) {
+                $null = $PwshInvCmdStringArray.Add('-KeyFilePath')
+                $null = $PwshInvCmdStringArray.Add("'$KeyFilePath'")
+            }
+            $null = $PwshInvCmdStringArray.Add('-HideComputerName')
+            $null = $PwshInvCmdStringArray.Add("-ScriptBlock {`n$PwshRemoteScriptBlockString`n}")
+            $null = $PwshInvCmdStringArray.Add('|')
+            $null = $PwshInvCmdStringArray.Add('ConvertTo-Json')
+            $PwshInvCmdString = $PwshInvCmdStringArray -join " "
+            $PwshCmdStringArray = @(
+                $(Get-Command pwsh).Source
+                "-c {$PwshInvCmdString}"
+            )
+            $PwshCmdString = $script:PwshCmdString = $PwshCmdStringArray -join " "
+
+            $FinalPassword = if ($DomainPassword) {$DomainPassword} else {$LocalPassword}
+
+            # NOTE: 'timeout' is in seconds
+            $ExpectScriptPrep = @(
+                'expect - << EOF'
+                'set timeout 10'
+                "spawn $PwshCmdString"
+                'match_max 100000'
+                'expect {'
+                '    \"*(yes/no)?*\" {'
+                '        send -- \"yes\r\"'
+                '        exp_continue'
+                '    }'
+                '    \"*password:*\" {'
+                "        send -- \`"$FinalPassword\r\`""
+                '        expect \"*\"'
+                '        expect eof'
+                '    }'
+                '}'
+                'EOF'
+            )
+            $ExpectScript = $ExpectScriptPrep -join "`n"
+
+            # The below $ExpectOutput is an array of strings
+            $ExpectOutput = bash -c "$ExpectScript"
+
+            $SSHOutputPrep = $ExpectOutput -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]",""
+
+            # Sample Contents of $ExpectOutput
+            <#
+            spawn pwsh -c Invoke-Command -HostName centos7nodomain -UserName vagrant -ScriptBlock {[pscustomobject]@{Output = "ConnectionSuccessful"}} | ConvertTo-Json
+            vagrant@centos7nodomain's password:
+            {
+            "Output": "ConnectionSuccessful",
+            "Platform": "Unix",
+            "DistroInfo": "Linux 3.10.0-862.2.3.el7.x86_64 #1 SMP Wed May 9 18:05:47 UTC 2018",
+            "PSComputerName": "centos7nodomain",
+            "RunspaceId": "ce31711a-87eb-47b8-809d-6598990d54c4",
+            "PSShowComputerName": true
+            }
+            #>
+
+            $JsonStartIndex = $SSHOutputPrep.IndexOf($($SSHOutputPrep -match '"Output"'))
+            $JsonEndIndex = $SSHOutputPrep.IndexOf($($SSHOutputPrep -match '^}$'))
+            [System.Collections.ArrayList]$FinalJson = $SSHOutputPrep[$JsonStartIndex..$JsonEndIndex]
+            $FinalJson.Insert(0,"{")
+
+            try {
+                $SSHCheckAsJson = $FinalJson | ConvertFrom-Json
+            }
+            catch {
+                $TrySSHExe = $True
+            }
+
+            if ($SSHCheckAsJson.Output -ne "ConnectionSuccessful") {
+                $TrySSHExe = $True
+            }
+
+            if ($SSHCheckAsJson.Output -eq "ConnectionSuccessful") {
+                if ($SSHCheckAsJson.Platform -eq "Win32NT") {
+                    $OSDetermination = "Windows"
+                    $ShellDetermination = "pwsh"
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
+                }
+                else {
+                    $OSDetermination = "Linux"
+                    $ShellDetermination = "pwsh"
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
+                }
+
+                $FinalOutput = [pscustomobject]@{
+                    OS              = $OSDetermination
+                    Shell           = $ShellDetermination
+                    OSVersionInfo   = $OSVersionInfo
+                }
+            }
+        }
+
+        if ($RemoteOSGuess -eq "Linux" -or $TrySSHExe) {
+            if ($LocalUserName) {
+                $FullUserName = $($LocalUserName -split "\\")[-1]
+            }
+            if ($DomainUserName) {
+                $DomainNameShort = $($DomainUserName -split "\\")[0]
+                $FullUserName = $($DomainUserName -split "\\")[-1]
+            }
+
+            $HostNameValue = $RHostIP = @(
+                $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+            )[0]
+
+            # This is what we're going for:
+            #     ssh -t pdadmin@192.168.2.10 "echo 'ConnectionSuccessful'"
+            [System.Collections.ArrayList]$SSHCmdStringArray = @(
+                'ssh'
+            )
+            if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+                $null = $SSHCmdStringArray.Add("-i")
+                $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
+            }
+            if ($LocalUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
+            }
+            if ($DomainUserName) {
+                $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
+            }
+            $Bytes = [System.Text.Encoding]::Unicode.GetBytes('$PSVersionTable | ConvertTo-Json')
+            $EncodedCommandPSVerTable = [Convert]::ToBase64String($Bytes)
+            $Bytes = [System.Text.Encoding]::Unicode.GetBytes('"Cim OS Info: " + $(Get-CimInstance Win32_OperatingSystem).Caption')
+            $EncodedCommandWinOSCim = [Convert]::ToBase64String($Bytes)
+            $SSHScript = @(
+                "echo ConnectionSuccessful"
+                "echo 111RootDirInfo111"
+                "cd /"
+                "dir"
+                "echo 111ProcessInfo111"
+                'Get-Process -Id \\\$PID'
+                "echo 111PwshJson111"
+                "pwsh -NoProfile -EncodedCommand $EncodedCommandPSVerTable"
+                "echo 111PowerShellCimInfo111"
+                "powershell -NoProfile -EncodedCommand $EncodedCommandWinOSCim"
+                "echo 111UnameOutput111"
+                "uname -a"
+                "echo 111HostnamectlOutput111"
+                "hostnamectl"
+            )
+            #$SSHScript = $SSHScript -join "; "
+            #$null = $SSHCmdStringArray.Add($($SSHScript))
+            #$null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
+            # NOTE: The below -replace regex string removes garbage escape sequences like: [116;1H
+            #$SSHCmdString = $script:SSHCmdString = '@($(' + $($SSHCmdStringArray -join " ") + ') -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]","") 2>$null'
+            $SSHCmdString = $script:SSHCmdString = $SSHCmdStringArray -join " "
+
+            $FinalPassword = if ($DomainPassword) {$DomainPassword} else {$LocalPassword}
+
+            $ExpectScriptPrep = @(
+                'expect - << EOF'
+                'set timeout 10'
+                "spawn $SSHCmdString"
+                'match_max 100000'
+                'expect {'
+                '    \"*(yes/no)?*\" {'
+                '        send -- \"yes\r\"'
+                '        exp_continue'
+                '    }'
+                '    \"*password:*\" {'
+                "        send -- \`"$FinalPassword\r\`""
+                '        expect \"*\"'
+                '        exp_continue'
+                '    }'
+                '}'
+                'expect \"*\"'
+                $SSHScript | foreach {'send -- \"' + $_ + '\r\"' + "`n" + 'expect \"*\"'}
+                'expect eof'
+                'EOF'
+            )
+            $ExpectScript = $ExpectScriptPrep -join "`n"
+            
+            # The below $ExpectOutput is an array of strings
+            $ExpectOutput = bash -c "$ExpectScript"
+
+            # NOTE: The below -replace regex string removes garbage escape sequences like: [116;1H
+            $SSHOutputPrep = $ExpectOutput -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]",""
+
+            if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
+                if ([bool]$($($SSHOutputPrep -split "`n") -match "'Get-Process' is not recognized as an internal or external command")) {
+                    $OSDetermination = "Windows"
+                    $ShellDetermination = "cmd"
+                    $OSVersionInfo = $null
+                }
+                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\") {
+                    $OSDetermination = "Windows"
+                    if ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*powershell.*111PwshJson111") {
+                        $ShellDetermination = "powershell"
+                        # The below $OSVersionInfo will be a string that looks something like:
+                        #   Microsoft Windows Server 2016 Standard Evaluation
+                        $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
+                    }
+                    elseif ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*pwsh.*111PwshJson111") {
+                        $ShellDetermination = "pwsh"
+                        # The below $OSVersionInfo will be a string that looks something like:
+                        #   Microsoft Windows Server 2016 Standard Evaluation
+                        $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
+                    }
+                }
+                elseif ($($SSHOutputPrep -join "") -match "111RootDirInfo111.*etc.*111ProcessInfo111" -and 
+                !$($($SSHOutputPrep -join "") -match "111RootDirInfo111.*Windows.*111ProcessInfo111")
+                ) {
+                    $OSDetermination = "Linux"
+                    if ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*pwsh.*111PwshJson111") {
+                        $ShellDetermination = "pwsh"
+                    }
+                    else {
+                        $ShellDetermination = "bash"
+                    }
+
+                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($($($SSHOutputPrep -split "`n") -match "uname -a"))
+                    $UnameOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $HostnamectlOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 2)..$($($SSHOutputPrep -split "`n").Count-1)]
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($UnameOutput) {
+                        $null = $OSVersionInfo.Add($UnameOutput)
+                    }
+                    if ($HostnamectlOutput) {
+                        $null = $OSVersionInfo.Add($HostnamectlOutput)
+                    }
+                }
+
+                $FinalOutput = [pscustomobject]@{
+                    OS              = $OSDetermination
+                    Shell           = $ShellDetermination
+                    OSVersionInfo   = $OSVersionInfo
+                }
+            }
+        }
+    }
+    else {
+        Write-Error "Unable to test SSH! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    $FinalOutput
+}
+
+
 <#
     
     .SYNOPSIS
@@ -8236,25 +9663,50 @@ function Update-PowerShellCore {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$False)]
-        [string]$DownloadDirectory,
+        [ValidateSet("Windows","Linux")]
+        [string]$RemoteOSGuess = "Windows",
+
+        [Parameter(Mandatory=$True)]
+        [string]$RemoteHostNameOrIP,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'
+        )]
+        [ValidatePattern("\\")] # Must be in format <RemoteHostName>\<User>
+        [string]$LocalUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'    
+        )]
+        [ValidatePattern("\\")] # Must be in format <DomainShortName>\<User>
+        [string]$DomainUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'    
+        )]
+        [securestring]$LocalPasswordSS,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'
+        )]
+        [securestring]$DomainPasswordSS,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("win", "macos", "linux", "ubuntu", "debian", "centos", "redhat")]
+        [string]$KeyFilePath,
+
+        [Parameter(Mandatory=$False)]
         [ValidateSet("Ubuntu1404","Ubuntu1604","Ubuntu1804","Ubuntu1810","Debian8","Debain9","CentOS7","RHEL7","OpenSUSE423","Fedora","Raspbian")]
-        $OS,
+        [string]$OS,
 
         [Parameter(Mandatory=$False)]
-        $ReleaseVersion,
+        [switch]$UsePackageManagement = $True,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("beta", "rc", "stable")]
-        $Channel,
-
-        [Parameter(Mandatory=$False)]
-        [int]$Iteration,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$Latest
+        [switch]$ConfigurePSRemoting
     )
 
     ##### BEGIN Native Helper Functions #####
@@ -8323,31 +9775,30 @@ function Update-PowerShellCore {
         return
     }
 
-    if (!$([Environment]::Is64BitProcess)) {
-        Write-Error "You are currently running the 32-bit version of PowerShell. Please run the 64-bit version found under C:\Windows\SysWOW64\WindowsPowerShell\v1.0 and try again. Halting!"
+    try {
+        $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $RemoteHostNameOrIP -ErrorAction Stop
+    }
+    catch {
+        Write-Error $_
+        Write-Error "Unable to resolve '$RemoteHostNameOrIP'! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
-    if ($Channel) {
-        if ($Channel -notmatch "beta|rc|stable") {
-            Write-Warning "The value provided for the -Channel parameter must be eitehr 'beta', 'rc', or 'stable'"
-            $Channel = Read-Host -Prompt "Please enter the Channel you would like to use [beta/rc/stable]"
-            while ($Channel -notmatch "beta|rc|stable") {
-                Write-Warning "The value provided for the -Channel parameter must be eitehr 'beta', 'rc', or 'stable'"
-                $Channel = Read-Host -Prompt "Please enter the Channel you would like to use [beta/rc/stable]"
-            }
+    if ($LocalUserName) {
+        if ($($LocalUserName -split "\\")[0] -ne $RemoteHostNetworkInfo.HostName) {
+            $ErrMsg = "The HostName indicated by -LocalUserName (i.e. $($($LocalUserName -split "\\")[0]) is not the same as " +
+            "the HostName as determined by network resolution (i.e. $($RemoteHostNetworkInfo.HostName))! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
         }
     }
-
-    if (!$DownloadDirectory) {
-        $UsePackageManagement = $True
-    }
-
-    if ($DownloadDirectory) {
-        # Check to see if DownloadDirectory exists
-        if (!$(Test-Path $DownloadDirectory)) {
-            Write-Error "The path $DownloadDirectory was not found! Halting!"
+    if ($DomainUserName) {
+        if ($($DomainUserName -split "\\")[0] -ne $($RemoteHostNetworkInfo.Domain -split "\.")[0]) {
+            $ErrMsg = "The Domain indicated by -DomainUserName (i.e. '$($($DomainUserName -split "\\")[0])') is not the same as " +
+            "the Domain as determined by network resolution (i.e. '$($($RemoteHostNetworkInfo.Domain -split "\.")[0])')! Halting!"
+            Write-Error $ErrMsg
             $global:FunctionResult = "1"
             return
         }
@@ -8430,7 +9881,83 @@ function Update-PowerShellCore {
             $LinuxGenericArmPackageName = $RaspbianArmPackageName = $($_ -split '/')[-1]
         }
     }
-    
+
+    # Windows Install Info
+    $WindowsPMInstallScriptPrep = @(
+        'try {'
+        "    if (`$(Get-Module -ListAvailable).Name -notcontains 'ProgramManagement') {`$null = Install-Module ProgramManagement -ErrorAction Stop}"
+        "    if (`$(Get-Module).Name -notcontains 'ProgramManagement') {`$null = Import-Module ProgramManagement -ErrorAction Stop}"
+        '    Install-Program -ProgramName powershell-core -CommandName pwsh.exe'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        "    `$global:FunctionResult = '1'"
+        '    return'
+        '}'
+    )
+    $WindowsPMInstallScript = "powershell -NoProfile -Command \`"$($WindowsPMInstallScript -join '; ')\`""
+
+    $WindowsManualInstallScriptPrep = @(
+        "`$OutFilePath = Join-Path `$HOME 'Downloads\$Win64PackageName'"
+        "Invoke-WebRequest -Uri $Win64PackageUrl -OutFile `$OutFilePath"
+        '$DateStamp = Get-Date -Format yyyyMMddTHHmmss'
+        '$MSIFullPath = $OutFilePath'
+        '$MSIParentDir = $MSIFullPath | Split-Path -Parent'
+        '$MSIFileName = $MSIFullPath | Split-Path -Leaf'
+        "`$MSIFileNameOnly = `$MSIFileName -replace [regex]::Escape('.msi'),''"
+        "`$logFile = Join-Path `$MSIParentDir (`$MSIFileNameOnly + `$DateStamp + '.log')"
+        '$MSIArguments = @('
+        "    '/i'"
+        '    $MSIFullPath'
+        "    '/qn'"
+        "    '/norestart'"
+        "    '/L*v'"
+        '    $logFile'
+        ')'
+        'Start-Process msiexec.exe -ArgumentList $MSIArguments -Wait -NoNewWindow'
+    )
+    $WindowsManualInstallScript = "powershell -NoProfile -Command \`"$($WindowsManualInstallScriptPrep -join '; ')\`""
+
+    $WindowsUninstallScript = @(
+        'try {'
+        '    if ($(Get-Module -ListAvailable).Name -notcontains "ProgramManagement") {$null = Install-Module ProgramManagement -ErrorAction Stop}'
+        '    if ($(Get-Module).Name -notcontains "ProgramManagement") {$null = Import-Module ProgramManagement -ErrorAction Stop}'
+        '    Install-Program -ProgramName powershell-core -CommandName pwsh.exe'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        '    $global:FunctionResult = "1"'
+        '    return'
+        '}'
+        'try {'
+        '    Uninstall-Program -ProgramName powershell-core -ErrorAction Stop'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        '    $global:FunctionResult = "1"'
+        '    return'
+        '}'
+    )
+
+    $WindowsPwshRemotingScript = @(
+        'try {'
+        "    if (`$(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {`$null = Install-Module WinSSH -ErrorAction Stop}"
+        "    if (`$(Get-Module).Name -notcontains 'WinSSH') {`$null = Import-Module WinSSH -ErrorAction Stop}"
+        '    Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        "    `$global:FunctionResult = '1'"
+        '    return'
+        '}'
+    )
+
+    $Windows = [pscustomobject]@{
+        PackageManagerInstallScript = $WindowsPMInstallScript
+        ManualInstallScript         = $WindowsManualInstallScript
+        UninstallScript             = $WindowsUninstallScript
+        ConfigurePwshRemotingScript = $WindowsPwshRemotingScript
+    }
     
     # Ubuntu 14.04 Install Info
     $Ubuntu1404PMInstallScriptPrep = @(
@@ -8443,120 +9970,369 @@ function Update-PowerShellCore {
 
     $Ubuntu1404ManualInstallScriptPrep = @(
         "wget -q $Ubuntu1404PackageUrl"
-        'dpkg -i powershell_6.1.0-1.ubuntu.14.04_amd64.deb'
+        "dpkg -i $Ubuntu1404PackageName"
         'apt install -f'
     )
     $Ubuntu1404ManualInstallScript = "sudo bash -c `"$($Ubuntu1404ManualInstallScriptPrep -join '; ')`""
 
+    $Ubuntu1404UninstallScript = 'sudo apt remove powershell'
+
     $Ubuntu1404 = [pscustomobject]@{
-        PackageManagerInstallScript = 
-        ManualInstallScript = 
-    }
-    $RepoUrls = @{
-        Ubuntu1404      = "https://packages.microsoft.com/config/ubuntu/14.04/packages-microsoft-prod.deb"
-        Ubuntu1604      = ""
-        Ubuntu1804      = ""
-        Ubuntu1810      = ""
-        Debian8         = ""
-        Debian9         = ""
-        CentOS7         = ""
-        RHEL7           = ""
-        OpenSUSE423     = ""
-        Fedora          = ""
-        ArchLinux       = ""
-        Kali            = ""
+        PackageManagerInstallScript = $Ubuntu1404PMInstallScript
+        ManualInstallScript         = $Ubuntu1404ManualInstallScript
+        UninstallScript             = $Ubuntu1404UninstallScript
     }
 
-    if ($PSVersionTable.Platform -eq "Unix" -and $PSVersionTable.OS -notmatch "Darwin") {
-        try {
-            $CheckOS = $($(hostnamectl | grep "Operating System") -replace "Operating System:","").Trim()
+    # Ubuntu 16.04 Install Info
+    $Ubuntu1604PMInstallScriptPrep = @(
+        'wget -q https://packages.microsoft.com/config/ubuntu/16.04/packages-microsoft-prod.deb'
+        'dpkg -i packages-microsoft-prod.deb'
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Ubuntu1604PMInstallScript = "sudo bash -c `"$($Ubuntu1604PMInstallScript -join '; ')`""
+
+    $Ubuntu1604ManualInstallScriptPrep = @(
+        "wget -q $Ubuntu1604PackageUrl"
+        "dpkg -i $Ubuntu1604PackageName"
+        'apt install -f'
+    )
+    $Ubuntu1604ManualInstallScript = "sudo bash -c `"$($Ubuntu1604ManualInstallScriptPrep -join '; ')`""
+
+    $Ubuntu1604UninstallScript = 'sudo apt remove powershell'
+
+    $Ubuntu1604 = [pscustomobject]@{
+        PackageManagerInstallScript = $Ubuntu1604PMInstallScript
+        ManualInstallScript         = $Ubuntu1604ManualInstallScript
+        UninstallScript             = $Ubuntu1604UninstallScript
+    }
+
+    # Ubuntu 18.04 Install Info
+    $Ubuntu1804PMInstallScriptPrep = @(
+        'wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb'
+        'dpkg -i packages-microsoft-prod.deb'
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Ubuntu1804PMInstallScript = "sudo bash -c `"$($Ubuntu1804PMInstallScript -join '; ')`""
+
+    $Ubuntu1804ManualInstallScriptPrep = @(
+        "wget -q $Ubuntu1804PackageUrl"
+        "dpkg -i $Ubuntu1804PackageName"
+        'apt install -f'
+    )
+    $Ubuntu1804ManualInstallScript = "sudo bash -c `"$($Ubuntu1804ManualInstallScriptPrep -join '; ')`""
+
+    $Ubuntu1804UninstallScript = 'sudo apt remove powershell'
+
+    $Ubuntu1804 = [pscustomobject]@{
+        PackageManagerInstallScript = $Ubuntu1804PMInstallScript
+        ManualInstallScript         = $Ubuntu1804ManualInstallScript
+        UninstallScript             = $Ubuntu1804UninstallScript
+    }
+
+    # Debian 8 Install Info
+    $Debian8PMInstallScriptPrep = @(
+        'apt update'
+        'apt install curl apt-transport-https'
+        'curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -'
+        "sh -c 'echo `"deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-debian-jessie-prod jessie main`" > /etc/apt/sources.list.d/microsoft.list'"
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Debian8PMInstallScript = "sudo bash -c `"$($Debain8PMInstallScript -join '; ')`""
+
+    $Debian8ManualInstallScriptPrep = @(
+        "wget -q $Debian8PackageUrl"
+        "dpkg -i $Debian8PackageName"
+        'apt install -f'
+    )
+    $Debian8ManualInstallScript = "sudo bash -c `"$($Debian8ManualInstallScriptPrep -join '; ')`""
+
+    $Debian8UninstallScript = 'sudo apt remove powershell'
+
+    $Debian8 = [pscustomobject]@{
+        PackageManagerInstallScript = $Debian8PMInstallScript
+        ManualInstallScript         = $Debian8ManualInstallScript
+        UninstallScript             = $Debian8UninstallScript
+    }
+
+    # Debian 9 Install Info
+    $Debian9PMInstallScriptPrep = @(
+        'apt update'
+        'apt install install curl gnupg apt-transport-https'
+        'curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -'
+        "sh -c 'echo `"deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-debian-stretch-prod stretch main`" > /etc/apt/sources.list.d/microsoft.list'"
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Debian9PMInstallScript = "sudo bash -c `"$($Debain9PMInstallScript -join '; ')`""
+
+    $Debian9ManualInstallScriptPrep = @(
+        "wget -q $Debian9PackageUrl"
+        "dpkg -i $Debian9PackageName"
+        'apt install -f'
+    )
+    $Debian9ManualInstallScript = "sudo bash -c `"$($Debian9ManualInstallScriptPrep -join '; ')`""
+
+    $Debian9UninstallScript = 'sudo apt remove powershell'
+
+    $Debian9 = [pscustomobject]@{
+        PackageManagerInstallScript = $Debian9PMInstallScript
+        ManualInstallScript         = $Debian9ManualInstallScript
+        UninstallScript             = $Debian9UninstallScript
+    }
+
+    # CentOS 7 and RHEL 7 Install Info
+    $CentOS7PMInstallScriptPrep = $RHELPMInstallScriptPrep = @(
+        'curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo tee /etc/yum.repos.d/microsoft.repo'
+        'yum install -y powershell'
+    )
+    $CentOS7PMInstallScript = $RHEL7PMInstallScript = "sudo bash -c `"$($CentOS7PMInstallScript -join '; ')`""
+
+    $CentOS7ManualInstallScriptPrep = $RHEL7ManualInstallScriptPrep = @(
+        "yum install $CentOS7PackageUrl"
+    )
+    $CentOS7ManualInstallScript = $RHEL7ManualInstallScript = "sudo bash -c `"$($CentOS7ManualInstallScriptPrep -join '; ')`""
+
+    $CentOS7UninstallScript = $RHEL7UninstallScript = 'sudo yum remove powershell'
+
+    $CentOS7 = $RHEL7 = [pscustomobject]@{
+        PackageManagerInstallScript = $CentOS7PMInstallScript
+        ManualInstallScript         = $CentOS7ManualInstallScript
+        UninstallScript             = $CentOS7UninstallScript
+    }
+
+    # OpenSUSE 42.3 Install Info
+    $OpenSUSE423PMInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        'zypper ar https://packages.microsoft.com/rhel/7/prod/'
+        'zypper update'
+        'zypper install powershell'
+    )
+    $OpenSUSE423PMInstallScript = "sudo bash -c `"$($OpenSUSE423PMInstallScript -join '; ')`""
+
+    $OpenSUSE423ManualInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        "zypper install $OpenSUSE423PackageUrl"
+    )
+    $OpenSUSE423ManualInstallScript = "sudo bash -c `"$($OpenSUSE423ManualInstallScriptPrep -join '; ')`""
+
+    $OpenSUSE423UninstallScript = 'sudo zypper remove powershell'
+
+    $OpenSUSE423 = [pscustomobject]@{
+        PackageManagerInstallScript = $OpenSUSE423PMInstallScript
+        ManualInstallScript         = $OpenSUSE423ManualInstallScript
+        UninstallScript             = $OpenSUSE423UninstallScript
+    }
+
+    # Fedora Install Info
+    $FedoraPMInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        'curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo tee /etc/yum.repos.d/microsoft.repo'
+        'dnf update'
+        'dnf install compat-openssl10'
+        'dnf install -y powershell'
+    )
+    $FedoraPMInstallScript = "sudo bash -c `"$($FedoraPMInstallScript -join '; ')`""
+
+    $FedoraManualInstallScriptPrep = @(
+        'dnf install compat-openssl10'
+        "dnf install $FedoraPackageUrl"
+    )
+    $FedoraManualInstallScript = "sudo bash -c `"$($FedoraManualInstallScriptPrep -join '; ')`""
+
+    $FedoraUninstallScript = 'sudo dnf remove powershell'
+
+    $Fedora = [pscustomobject]@{
+        PackageManagerInstallScript = $FedoraPMInstallScript
+        ManualInstallScript         = $FedoraManualInstallScript
+        UninstallScript             = $FedoraUninstallScript
+    }
+
+    # Raspbian Install Info
+    $RaspbianManualInstallScriptPrep = @(
+        'apt install libunwind8'
+        "wget -q $LinuxGenericArmPackageUrl"
+        'mkdir ~/powershell'
+        "tar -xvf ./$LinuxGenericArmPackageName -C ~/powershell"
+    )
+    $RaspbianManualInstallScript = "sudo bash -c `"$($RaspbianManualInstallScriptPrep -join '; ')`""
+
+    $RaspbianUninstallScript = 'rm -rf ~/powershell'
+
+    $Raspbian = [pscustomobject]@{
+        PackageManagerInstallScript = $null
+        ManualInstallScript         = $RaspbianManualInstallScript
+        UninstallScript             = $RaspbianUninstallScript
+    }
+
+    # Probe the Remote Host to get OS and Shell Info
+    try {
+        $GetSSHProbeSplatParams = @{
+            RemoteHostNameOrIP  = $RemoteHostNameOrIP
         }
-        catch {
-            try {
-                $CheckOS = $(uname -a).Trim()
+        if ($DomainUserName -and $DomainPasswordSS) {
+            $GetSSHProbeSplatParams.Add("DomainUserName",$DomainUserName)
+            $GetSSHProbeSplatParams.Add("DomainPasswordSS",$DomainPasswordSS)
+        }
+        if ($LocalUserName -and $LocalPasswordSS) {
+            $GetSSHProbeSplatParams.Add("LocalUserName",$LocalUserName)
+            $GetSSHProbeSplatParams.Add("LocalPasswordSS",$LocalPasswordSS)
+        }
+        if ($KeyFilePath) {
+            $GetSSHProbeSplatParams.Add("KeyFilePath",$KeyFilePath)
+        }
+        $OSCheck = Get-SSHProbe @GetSSHProbeSplatParams
+    }
+    catch {
+        Write-Error $_
+        $global:FunctionResult = "1"
+        return
+    }
+
+    # Linux ubuntu1804.localdomain 4.15.0-36-generic #39-Ubuntu SMP Mon Sep 24 16:19:09 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+    # Linux Ubuntu16VM 4.10.0-35-generic #39~16.04.1-Ubuntu SMP Wed Sep 13 09:02:42 UTC 2017 x86_64 x86_64 x86_64 GNU/Linux
+    # Linux Debian8Jesse 3.16.0-4-amd64 #1 SMP Debian 3.16.43-2+deb8u1 (2017-06-18) x86_64 GNU/Linux
+    # Linux opensuse42 4.4.155-68-default #1 SMP Tue Sep 11 13:07:19 UTC 2018 (4ecc783) x86_64 x86_64 x86_64 GNU/Linux
+    <#
+    Static hostname: opensuse42.localdomain.localdomain
+    Transient hostname: opensuse42
+            Icon name: computer-vm
+            Chassis: vm
+            Machine ID: 39b1ead088e9fa0007c1399d5bb31e99
+            Boot ID: 15fb6ea1319443a293e194afec36d724
+        Virtualization: microsoft
+    Operating System: openSUSE Leap 42.3
+        CPE OS Name: cpe:/o:opensuse:leap:42.3
+                Kernel: Linux 4.4.155-68-default
+        Architecture: x86-64
+    #>
+    if (!$OS) {
+        switch ($OSCheck.OSVersionInfo) {
+            {$_ -match 'Microsoft|Windows'} {
+                $OS = "Windows"
+                $WindowsVersion = $OSCheck.OSVersionInfo
             }
-            catch {
-                $CheckOS = $PSVersionTable.OS
+
+            {$_ -match "Ubuntu 18\.04|18\.04\.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1804|Ubuntu.*18\.04|1804.*Ubuntu|18\.04.*Ubuntu"} {
+                $OS = "Ubuntu1804"
+                $UbuntuVersion = "18.04"
+            }
+
+            {$_ -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1604|Ubuntu.*16\.04|1604.*Ubuntu|16\.04.*Ubuntu"} {
+                $OS = "Ubuntu1604"
+                $UbuntuVersion = "16.04"
+            }
+
+            {$_ -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1404|Ubuntu.*14\.04|1404.*Ubuntu|14\.04.*Ubuntu"} {
+                $OS = "Ubuntu1404"
+                $UbuntuVersion = "14.04"
+            }
+
+            {$_ -match 'Debian GNU/Linux 8|\+deb8' -or $_ -match "jessie"} {
+                $OS = "Debian8"
+                $DebianVersion = "8"
+            }
+
+            {$_ -match 'Debian GNU/Linux 9|\+deb9' -or $_ -match "stretch"} {
+                $OS = "Debian9"
+                $DebianVersion = "9"
+            }
+
+            {$_ -match 'CentOS|\.el[0-9]\.'} {
+                $OS = "CentOS7"
+                $CentOSVersion = "7"
+            }
+
+            {$_ -match 'RedHat'} {
+                $OS = "RHEL7"
+                $RHELVersion = "7"
+            }
+
+            {$_ -match 'openSUSE|leap.*42\.3|Leap 42\.3|openSUSE Leap'} {
+                $OS = "OpenSUSE423"
+                $OpenSUSEVersion = "42.3"
+            }
+
+            {$_ -match 'Fedora 28|fedora:28'} {
+                $OS = "Fedora"
+                $FedoraVersion = "28"
+            }
+
+            {$_ -match 'Fedora 27|fedora:27'} {
+                $OS = "Fedora"
+                $FedoraVersion = "27"
+            }
+
+            {$_ -match 'armv.*GNU'} {
+                $OS = "Raspbian"
+                $RaspbianVersion = "stretch"
             }
         }
     }
 
     if (!$OS) {
-        if ($PSVersionTable.PSEdition -eq "Desktop" -or $PSVersionTable.OS -match "Windows" -or $PSVersionTable.PSVersion.Major -le 5) {
-            $OS = "win"
+        Write-Error "Unable to determine OS Version Information for $RemoteHostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+
+    # [ValidateSet("Ubuntu1404","Ubuntu1604","Ubuntu1804","Debian8","Debain9","CentOS7","RHEL7","OpenSUSE423","Fedora","Raspbian")]
+
+    if ($OSCheck.Platform -eq "Windows") {
+        if ($LocalPasswordSS) {
+            $LocalPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($LocalPasswordSS))
         }
-        if ($PSVersionTable.OS -match "Darwin") {
-            $OS = "macos"
+        If ($DomainPasswordSS) {
+            $DomainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainPasswordSS))
         }
-        if ($PSVersionTable.Platform -eq "Unix" -and $PSVersionTable.OS -notmatch "Darwin") {
-            switch ($CheckOS) {
-                {$_ -match "Ubuntu 18.04|18.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "18.04"
-                }
 
-                {$_ -match "Ubuntu 17.04|17.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "17.04"
-                }
+        if ($LocalUserName) {
+            $FullUserName = $($LocalUserName -split "\\")[-1]
+        }
+        if ($DomainUserName) {
+            $DomainNameShort = $($DomainUserName -split "\\")[0]
+            $FullUserName = $($DomainUserName -split "\\")[-1]
+        }
 
-                {$_ -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "16.04"
-                }
+        $HostNameValue = $RHostIP = @(
+            $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+        )[0]
 
-                {$_ -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "14.04"
-                }
+        # This is what we're going for:
+        #     ssh pdadmin@192.168.2.10 "echo 'ConnectionSuccessful'"
+        [System.Collections.ArrayList]$SSHCmdStringArray = @(
+            'ssh'
+        )
+        if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+            $null = $SSHCmdStringArray.Add("-i")
+            $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
+        }
+        if ($LocalUserName) {
+            $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
+        }
+        if ($DomainUserName) {
+            $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
+        }
 
-                {$_ -match 'Debian GNU/Linux 8|\+deb8'} {
-                    $OS = "debian"
-                    $DebianVersion = "8"
-                }
-
-                {$_ -match 'Debian GNU/Linux 9|\+deb9'} {
-                    $OS = "debian"
-                    $DebianVersion = "9"
-                }
-
-                {$_ -match 'CentOS|\.el[0-9]\.'} {
-                    $OS = "centos"
-                }
-
-                {$_ -match 'RedHat'} {
-                    $OS = "redhat"
-                }
-
-                Default {
-                    $OS = "linux"
-                }
+        if ($UsePackageManagement) {
+            if ($ConfigurePSRemoting) {
+                $SSHCmdString = $($SSHCmdStringArray -join " ") + ' "' + $Windows.WindowsPwshRemotingScript + '"'
             }
+            else {
+                $SSHCmdString = $($SSHCmdStringArray -join " ") + ' "' + $Windows.WindowsPMInstallScript + '"'
+            }
+            $PwshConfigResult = [scriptblock]::Create($SSHCmdString).InvokeReturnAsIs()
         }
     }
-    else {
-        switch ($OS) {
-            {$CheckOS -match "Ubuntu 17.04|17.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "17.04"
-            }
+    if ($OSCheck.Platform -eq "Linux") {
 
-            {$CheckOS -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "16.04"
-            }
-
-            {$CheckOS -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "14.04"
-            }
-
-            {$_ -match 'Debian GNU/Linux 8|\+deb8'} {
-                $DebianVersion = "8"
-            }
-
-            {$_ -match 'Debian GNU/Linux 9|\+deb9'} {
-                $DebianVersion = "9"
-            }
-        }
     }
+
+
+
 
     if ($PSBoundParameters.Keys -contains "Latest") {
         $ReleaseVersion = $null
@@ -9178,7 +10954,6 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:GetNativePath}.Ast.Extent.Text
     ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetWorkingCredentials}.Ast.Extent.Text
-    ${Function:InitializeSSH}.Ast.Extent.Text
     ${Function:InstallFeatureDism}.Ast.Extent.Text
     ${Function:InvokeModuleDependencies}.Ast.Extent.Text
     ${Function:InvokePSCompatibility}.Ast.Extent.Text
@@ -9215,6 +10990,7 @@ if (![bool]$(Get-Module UniversalDashboard.Community)) {
     ${Function:Get-RemoteDesktop}.Ast.Extent.Text
     ${Function:Get-ScheduledTasks}.Ast.Extent.Text
     ${Function:Get-ServerInventory}.Ast.Extent.Text
+    ${Function:Get-SSHProbe}.Ast.Extent.Text
     ${Function:Get-StorageDisk}.Ast.Extent.Text
     ${Function:Get-StorageFileShare}.Ast.Extent.Text
     ${Function:Get-StorageVolume}.Ast.Extent.Text
@@ -9245,8 +11021,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0ZqvE+Bw/+ZgVGpYeKceAV1a
-# 2IKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU6z0WEiQy7/DYIymycSXmvvYz
+# pSqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -9303,11 +11079,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFMM5yfM5Y6stnvd
-# wVb2CPICsO6PMA0GCSqGSIb3DQEBAQUABIIBABeRpzk1wOK6yaYk6E+OykqEN4+D
-# Uo64xgUQkohJQk7OwyM3jZw4oCYngwiqNMkhL3jO2V1JjynhSvwMFMfkEgAEhuam
-# UbJS6KTiWZHrzhgtIEczNDjxu3wHw1oV273EpBYl1RctIOAwpneMNbgT8k7G+Lp2
-# bm2PEpxx9xN6fJi2XIUsERIbTlHQD0cWlt71sYf4qmMi1d7ADo88JHiWGhP9pF3B
-# 9ZNnjbCWzsuDSgrTATP4dc2+9a5uEFMvzAZs+ohn0gWgkZVAp+3gE/hGDSSUMnLK
-# nv6eI47RHfChcc8WTc2l4QthIQNeBDLhCBriL04scc0ZUvP2uqUy6B0juQg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCxsbIJdtXfKk0je
+# nxIv6ke63erZMA0GCSqGSIb3DQEBAQUABIIBAIOhn1fGJQnYNKhRjKe2EDZLoDf6
+# RfCtbsGeUZQjMl9X3T9rBI8fkqSRtYCoZMtk+Wp2RtYxLZOhVNxYJs2LwHvBDIsq
+# 3VdvYhuNoWQcagNV1f+H2nuazQsFfKkSgjPEsKt/pRQXOu9wBKfjNhe0eb81ontc
+# 2iM2PBKTBqFV6C6kdCa4GMLAHks1AFGr8yBmmKWTNlkhoWqUAQRhEkSPEpQCu+qi
+# aFyYI08hH6fK0k+9BI2aHMG5gjF+ua5NlTR+RjPnbEqnSkbkBxpE3t6xU1922aDm
+# eVfXFAfK62/uNj1ldkKA2ib0AMawiqXkjqDKAAhiYvwaBgq4tgAKc3KTK7w=
 # SIG # End signature block

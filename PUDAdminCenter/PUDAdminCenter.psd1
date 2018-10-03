@@ -74,7 +74,7 @@ FunctionsToExport = 'Configure-PwshRemotingCrossPlatform','Download-NuGetPackage
                     'Get-FirewallRules','Get-IPRange','Get-LocalGroups','Get-LocalGroupUsers','Get-LocalUserBelongGroups',
                     'Get-LocalUsers','Get-Networks','Get-NetworkInfo','Get-PendingUpdates','Get-Processes','Get-PUDAdminCenter',
                     'Get-RegistrySubKeys','Get-RegistryValues','Get-RemoteDesktop','Get-ScheduledTasks',
-                    'Get-ServerInventory','Get-StorageDisk','Get-StorageFileShare','Get-StorageVolume',
+                    'Get-ServerInventory','Get-SSHProbe','Get-StorageDisk','Get-StorageFileShare','Get-StorageVolume',
                     'Get-WUAHistory','Install-DotNet472','New-EnvironmentVariable','New-Runspace',
                     'Remove-EnvironmentVariable','Set-ComputerIdentification','Set-EnvironmentVariable',
                     'Set-RemoteDesktop','Start-DiskPerf','Stop-DiskPerf','Update-PowerShellCore'

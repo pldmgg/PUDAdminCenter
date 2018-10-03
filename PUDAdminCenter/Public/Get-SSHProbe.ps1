@@ -1,4 +1,4 @@
-function InitializeSSH {
+function Get-SSHProbe {
     [CmdletBinding(DefaultParameterSetName='Domain')]
     Param (
         [Parameter(Mandatory=$False)]
@@ -38,21 +38,10 @@ function InitializeSSH {
         [string]$KeyFilePath,
 
         [Parameter(Mandatory=$False)]
-        $OutputTracker
+        [string]$OutputTracker
     )
 
     #region >> Prep
-
-    try {
-        if ($(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {$null = Install-Module WinSSH -ErrorAction Stop}
-        if ($(Get-Module).Name -notcontains 'WinSSH') {$null = Import-Module WinSSH -ErrorAction Stop}
-        Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
 
     try {
         $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $RemoteHostNameOrIP -ErrorAction Stop
@@ -88,6 +77,19 @@ function InitializeSSH {
     }
     If ($DomainPasswordSS) {
         $DomainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainPasswordSS))
+    }
+
+    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+        try {
+            if ($(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {$null = Install-Module WinSSH -ErrorAction Stop}
+            if ($(Get-Module).Name -notcontains 'WinSSH') {$null = Import-Module WinSSH -ErrorAction Stop}
+            Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     if ($PSVersionTable.Platform -eq "Unix") {
@@ -188,6 +190,7 @@ function InitializeSSH {
                 '    Output = "ConnectionSuccessful"'
                 '    Platform = $PSVersionTable.Platform'
                 '    DistroInfo = $PSVersionTable.OS'
+                '    Hostnamectl = hostnamectl'
                 '}'
             ) | foreach {"    $_"}
             $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
@@ -259,7 +262,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -295,7 +298,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -345,7 +348,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -383,7 +386,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -432,7 +435,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -484,7 +487,7 @@ function InitializeSSH {
                                 }
                                 else {
                                     if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                        Stop-Process -Id $PSAwaitProcess.Id
+                                        Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                     }
                                     while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                         Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -540,7 +543,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Warning "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -612,7 +615,7 @@ function InitializeSSH {
                     }
                     else {
                         if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                         }
                         while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                             Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -634,12 +637,24 @@ function InitializeSSH {
                 if ($SSHCheckAsJson.Platform -eq "Win32NT") {
                     $OSDetermination = "Windows"
                     $ShellDetermination = "pwsh"
-                    $OSVersionInfo = $SSHCheckAsJson.DistroInfo
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
                 }
                 else {
                     $OSDetermination = "Linux"
                     $ShellDetermination = "pwsh"
-                    $OSVersionInfo = $SSHCheckAsJson.DistroInfo
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
                 }
 
                 $FinalOutput = [pscustomobject]@{
@@ -685,15 +700,18 @@ function InitializeSSH {
             $SSHScript = @(
                 "echo ConnectionSuccessful"
                 "echo 111RootDirInfo111"
-                "dir /"
+                "cd /"
+                "dir"
                 "echo 111ProcessInfo111"
                 'Get-Process -Id `$PID'
                 "echo 111PwshJson111"
-                "pwsh -NoProfile -EncodedCommand '$EncodedCommandPSVerTable'"
+                "pwsh -NoProfile -EncodedCommand $EncodedCommandPSVerTable"
                 "echo 111PowerShellCimInfo111"
-                "powershell -NoProfile -EncodedCommand '$EncodedCommandWinOSCim'"
+                "powershell -NoProfile -EncodedCommand $EncodedCommandWinOSCim"
                 "echo 111UnameOutput111"
                 "uname -a"
+                "echo 111HostnamectlOutput111"
+                "hostnamectl"
             )
             $SSHScript = $SSHScript -join "; "
             $null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
@@ -745,7 +763,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -777,7 +795,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -827,7 +845,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -861,7 +879,7 @@ function InitializeSSH {
                         }
                         else {
                             if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                Stop-Process -Id $PSAwaitProcess.Id
+                                Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                             }
                             while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                 Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -910,7 +928,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -963,7 +981,7 @@ function InitializeSSH {
                                 }
                                 else {
                                     if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                        Stop-Process -Id $PSAwaitProcess.Id
+                                        Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                     }
                                     while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                         Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -1015,7 +1033,7 @@ function InitializeSSH {
                             }
                             else {
                                 if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                                    Stop-Process -Id $PSAwaitProcess.Id
+                                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                                 }
                                 while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                                     Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -1041,7 +1059,7 @@ function InitializeSSH {
                     }
                     else {
                         if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                            Stop-Process -Id $PSAwaitProcess.Id
+                            Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
                         }
                         while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
                             Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
@@ -1093,7 +1111,15 @@ function InitializeSSH {
                     if ($UnameOutputHeaderIndex -eq "-1") {
                         $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($UnameOutputHeader[0])
                     }
-                    $OSVersionInfo = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $UnameOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $HostnamectlOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 2)..$($($SSHOutputPrep -split "`n").Count-1)]
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($UnameOutput) {
+                        $null = $OSVersionInfo.Add($UnameOutput)
+                    }
+                    if ($HostnamectlOutput) {
+                        $null = $OSVersionInfo.Add($HostnamectlOutput)
+                    }
                 }
 
                 $FinalOutput = [pscustomobject]@{
@@ -1133,8 +1159,9 @@ function InitializeSSH {
             $PwshRemoteScriptBlockStringArray = @(
                 '[pscustomobject]@{'
                 '    Output = \"ConnectionSuccessful\"'
-                '    Platform = $PSVersionTable.Platform'
-                '    DistroInfo = $PSVersionTable.OS'
+                '    Platform = (Get-Variable PSVersionTable -ValueOnly).Platform'
+                '    DistroInfo = (Get-Variable PSVersionTable -ValueOnly).OS'
+                '    Hostnamectl = hostnamectl'
                 '}'
             ) | foreach {"    $_"}
             $PwshRemoteScriptBlockString = $PwshRemoteScriptBlockStringArray -join "`n"
@@ -1186,6 +1213,8 @@ function InitializeSSH {
             # The below $ExpectOutput is an array of strings
             $ExpectOutput = bash -c "$ExpectScript"
 
+            $SSHOutputPrep = $ExpectOutput -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]",""
+
             # Sample Contents of $ExpectOutput
             <#
             spawn pwsh -c Invoke-Command -HostName centos7nodomain -UserName vagrant -ScriptBlock {[pscustomobject]@{Output = "ConnectionSuccessful"}} | ConvertTo-Json
@@ -1200,9 +1229,9 @@ function InitializeSSH {
             }
             #>
 
-            $JsonStartIndex = $ExpectOutput.IndexOf($($ExpectOutput -match '"Output"'))
-            $JsonEndIndex = $ExpectOutput.IndexOf($($ExpectOutput -match '^}$'))
-            [System.Collections.ArrayList]$FinalJson = $ExpectOutput[$JsonStartIndex..$JsonEndIndex]
+            $JsonStartIndex = $SSHOutputPrep.IndexOf($($SSHOutputPrep -match '"Output"'))
+            $JsonEndIndex = $SSHOutputPrep.IndexOf($($SSHOutputPrep -match '^}$'))
+            [System.Collections.ArrayList]$FinalJson = $SSHOutputPrep[$JsonStartIndex..$JsonEndIndex]
             $FinalJson.Insert(0,"{")
 
             try {
@@ -1220,12 +1249,24 @@ function InitializeSSH {
                 if ($SSHCheckAsJson.Platform -eq "Win32NT") {
                     $OSDetermination = "Windows"
                     $ShellDetermination = "pwsh"
-                    $OSVersionInfo = $SSHCheckAsJson.DistroInfo
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
                 }
                 else {
                     $OSDetermination = "Linux"
                     $ShellDetermination = "pwsh"
-                    $OSVersionInfo = $SSHCheckAsJson.DistroInfo
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($SSHCheckAsJson.DistroInfo) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.DistroInfo)
+                    }
+                    if ($SSHCheckAsJson.Hostnamectl) {
+                        $null = $OSVersionInfo.Add($SSHCheckAsJson.Hostnamectl)
+                    }
                 }
 
                 $FinalOutput = [pscustomobject]@{
@@ -1271,20 +1312,25 @@ function InitializeSSH {
             $SSHScript = @(
                 "echo ConnectionSuccessful"
                 "echo 111RootDirInfo111"
-                "dir /"
+                "cd /"
+                "dir"
                 "echo 111ProcessInfo111"
-                'Get-Process -Id `$PID'
+                'Get-Process -Id \\\$PID'
                 "echo 111PwshJson111"
-                "pwsh -NoProfile -EncodedCommand '$EncodedCommandPSVerTable'"
+                "pwsh -NoProfile -EncodedCommand $EncodedCommandPSVerTable"
                 "echo 111PowerShellCimInfo111"
-                "powershell -NoProfile -EncodedCommand '$EncodedCommandWinOSCim'"
+                "powershell -NoProfile -EncodedCommand $EncodedCommandWinOSCim"
                 "echo 111UnameOutput111"
                 "uname -a"
+                "echo 111HostnamectlOutput111"
+                "hostnamectl"
             )
-            $SSHScript = $SSHScript -join "; "
-            $null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
+            #$SSHScript = $SSHScript -join "; "
+            #$null = $SSHCmdStringArray.Add($($SSHScript))
+            #$null = $SSHCmdStringArray.Add($('"' + $SSHScript + '"'))
             # NOTE: The below -replace regex string removes garbage escape sequences like: [116;1H
-            $SSHCmdString = $script:SSHCmdString = '@($(' + $($SSHCmdStringArray -join " ") + ') -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]","") 2>$null'
+            #$SSHCmdString = $script:SSHCmdString = '@($(' + $($SSHCmdStringArray -join " ") + ') -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]","") 2>$null'
+            $SSHCmdString = $script:SSHCmdString = $SSHCmdStringArray -join " "
 
             $FinalPassword = if ($DomainPassword) {$DomainPassword} else {$LocalPassword}
 
@@ -1301,9 +1347,12 @@ function InitializeSSH {
                 '    \"*password:*\" {'
                 "        send -- \`"$FinalPassword\r\`""
                 '        expect \"*\"'
-                '        expect eof'
+                '        exp_continue'
                 '    }'
                 '}'
+                'expect \"*\"'
+                $SSHScript | foreach {'send -- \"' + $_ + '\r\"' + "`n" + 'expect \"*\"'}
+                'expect eof'
                 'EOF'
             )
             $ExpectScript = $ExpectScriptPrep -join "`n"
@@ -1311,42 +1360,51 @@ function InitializeSSH {
             # The below $ExpectOutput is an array of strings
             $ExpectOutput = bash -c "$ExpectScript"
 
-            $SSHOutputPrep = $ExpectOutput
+            # NOTE: The below -replace regex string removes garbage escape sequences like: [116;1H
+            $SSHOutputPrep = $ExpectOutput -replace "\e\[(\d+;)*(\d+)?[ABCDHJKfmsu]",""
 
             if ([bool]$($($SSHOutputPrep -split "`n") -match "^ConnectionSuccessful")) {
-                if ($SSHOutputPrep -match "ConnectionSuccessful; echo 111RootDirInfo111;") {
+                if ([bool]$($($SSHOutputPrep -split "`n") -match "'Get-Process' is not recognized as an internal or external command")) {
                     $OSDetermination = "Windows"
                     $ShellDetermination = "cmd"
                     $OSVersionInfo = $null
                 }
                 elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\") {
                     $OSDetermination = "Windows"
-                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+powershell") {
+                    if ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*powershell.*111PwshJson111") {
                         $ShellDetermination = "powershell"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
-                    elseif ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
+                    elseif ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*pwsh.*111PwshJson111") {
                         $ShellDetermination = "pwsh"
                         # The below $OSVersionInfo will be a string that looks something like:
                         #   Microsoft Windows Server 2016 Standard Evaluation
                         $OSVersionInfo = $($($($SSHOutputPrep -split "`n") -match "Cim OS Info:") -replace "Cim OS Info: ","").Trim()
                     }
                 }
-                elseif ($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match " etc " -and 
-                !$($SSHOutputPrep -match "111RootDirInfo111" -and $SSHOutputPrep -match "Directory:.*[a-zA-Z]:\\")
+                elseif ($($SSHOutputPrep -join "") -match "111RootDirInfo111.*etc.*111ProcessInfo111" -and 
+                !$($($SSHOutputPrep -join "") -match "111RootDirInfo111.*Windows.*111ProcessInfo111")
                 ) {
                     $OSDetermination = "Linux"
-                    if ($SSHOutputPrep -match "111ProcessInfo111" -and $SSHOutputPrep -match "Name[\s]+:[\s]+pwsh") {
+                    if ($($SSHOutputPrep -join "") -match "111ProcessInfo.*Process.*pwsh.*111PwshJson111") {
                         $ShellDetermination = "pwsh"
                     }
                     else {
                         $ShellDetermination = "bash"
                     }
 
-                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf("111UnameOutput111")
-                    $OSVersionInfo = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $UnameOutputHeaderIndex = $($SSHOutputPrep -split "`n").IndexOf($($($SSHOutputPrep -split "`n") -match "uname -a"))
+                    $UnameOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 1)]
+                    $HostnamectlOutput = $($SSHOutputPrep -split "`n")[$($UnameOutputHeaderIndex + 2)..$($($SSHOutputPrep -split "`n").Count-1)]
+                    [System.Collections.ArrayList]$OSVersionInfo = @()
+                    if ($UnameOutput) {
+                        $null = $OSVersionInfo.Add($UnameOutput)
+                    }
+                    if ($HostnamectlOutput) {
+                        $null = $OSVersionInfo.Add($HostnamectlOutput)
+                    }
                 }
 
                 $FinalOutput = [pscustomobject]@{
@@ -1365,12 +1423,11 @@ function InitializeSSH {
 
     $FinalOutput
 }
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4omGAAqjpC2r+O+BNGiE6sCO
-# 6J6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvpm4hkA1hn7F4V/ukzzI3HZR
+# k7+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1427,11 +1484,11 @@ function InitializeSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJytvMqhsIduVAzU
-# OQGzuOh3jdYuMA0GCSqGSIb3DQEBAQUABIIBACATsYDAgO/HB2Wf+pyAJbXh1CjK
-# cCkoArqPbzd+RhfhmZ+ItLXJoXVYBJQC2/N+hVQPWimI8bnN9nbjz3kOWKjXv4Je
-# HoIQI1r2Qmh8iC8X8D5e8OOi5DqOZ+jayYfCaryMDV/BB6mHODjAC/VFJymZI+iR
-# MrszotNw15FTgCwQU67vOrbwn2NtxMXGnV29M1V+TDErVsDDU6i3Zq6OaaA9v1uT
-# GCdgd0M/eyodWUyUl1WdVWA57UrWXznfh3lELeMOqXxJPoyqmZBYEGBJuMhrjsOI
-# JADtGiIMjd1iN6aGaiue7hlf4dYgBej9Ma2YWtYCu0/cUpN2OdUgTXbvMEs=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGWeBs3TuqFVeAzY
+# Mo1Oek3Bqgd4MA0GCSqGSIb3DQEBAQUABIIBAHS4zB/CvE0QrI/xvCUhpVQaxLTa
+# W5vMutIQhzN4mc+q7CMsEGwOkdK2lSGvxbEzgRVK1vzkpo4RimzHAi0UNcuC4cl0
+# 2vmVGM3LRSof4Ok7gqE+LKFWc6mhQjSN0nJt2TAbNImO2E8S0LstESEfx8XWEQrb
+# iVw0RdhrrN62PfZXSZCq/Gyzpb4+qxaiu5rhx6+kqxXrI81nwD2mpWn3P2BhoD2N
+# K0Tax7S28CRm2cFTs3nVnbYTU/YW3pL/9TmgChmKu56myvASX7jZ+OTSZYGX+M+a
+# aG6tLm9+PgENigCUvJzntUZHVqReCq4o7E7dygQ/SU65BoxfiEImJIX17Wg=
 # SIG # End signature block

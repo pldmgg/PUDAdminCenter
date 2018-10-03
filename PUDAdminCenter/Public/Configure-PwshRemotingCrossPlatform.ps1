@@ -11,7 +11,7 @@ function Configure-PwshRemotingCrossPlatform {
 
         [Parameter(Mandatory=$True)]
         [ValidatePattern("^ssh.*?-t [a-zA-z0-9]+@[a-zA-z0-9]+")]
-        [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> -t <user>@<remotehost>
+        [string]$SSHCmdOptions # Should be in format: ssh -o <option(s)> -i <keyfilepath> <user>@<remotehost>
     )
 
     $SSHCmdOptions = $SSHCmdOptions.Trim()
@@ -125,8 +125,8 @@ function Configure-PwshRemotingCrossPlatform {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzJQFKYuwyfjLxM7TsWXvDVhr
-# 51Wgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUB37mvBCHWkml2vpQ2zzOuJ17
+# jymgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -183,11 +183,11 @@ function Configure-PwshRemotingCrossPlatform {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHObAIOdEw0VSsba
-# IVjwcqGft5joMA0GCSqGSIb3DQEBAQUABIIBAEvqAEsp/7Yak+snGFWuIY/zG4Ev
-# 4fZ5IlFtFDkn6W3De7hgkL1fCFdZSDUWed5f9LBgoNq1qK7c1o7CrUqGDAJy4gCF
-# 5SkoN4qATeyVwy8R1XQyeL7FTRKca3H7CTOL9VEn+K+cBGWMzIce5GzW8FTKEo90
-# IU2OCMtXC+5y7FD0lRawPURu3GgoAj1+oGwIJMJjxbIYP0XNpxrOr2WBnDEGqnC3
-# Vdsz4Eph9b2q7gGYSfJnoGfH4UkS808+Rx+XSvE5S/5ptJMuN4DD+KEdTDc1j1us
-# yxe/xk+F8GE0GY+AasD1uFkqaI8oTIFbzA3SvxjeiVtk2l5qORnshG/V+m8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPASOPw56OX824i2
+# DpPwkMJfCRldMA0GCSqGSIb3DQEBAQUABIIBAFI8f1HZdDowz8vcCzGRqm32hccF
+# F88I8T8BiIdP2eM89YZyP9cP5GrepLmhtilPAAqHLuSrsK90EuLZSjQN8nkpH2XH
+# ulYbl8j1W4RuN58Dpyr0zb48KnmtmVdRjkxRyTlULHBXqQGoTRgKz3RRN0aeXpck
+# a/hX8murZTandg9hbymbZ3CPtB+6UVZhxUj2KS02BWiXNoDx8Vvm/5nbikTEs5jT
+# DleStB93FBwbEVHLVL7dELTIDjBsvuLI4OniwXlEf2e+VivUecaSbBXabqbybx4k
+# LxUK2S7qXaE9VxK+sei9tBARoY7pGDTYNhC2Xsbx/AeEONmmYKPHIn/gPxI=
 # SIG # End signature block

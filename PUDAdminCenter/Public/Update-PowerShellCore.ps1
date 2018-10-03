@@ -92,25 +92,50 @@ function Update-PowerShellCore {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$False)]
-        [string]$DownloadDirectory,
+        [ValidateSet("Windows","Linux")]
+        [string]$RemoteOSGuess = "Windows",
+
+        [Parameter(Mandatory=$True)]
+        [string]$RemoteHostNameOrIP,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'
+        )]
+        [ValidatePattern("\\")] # Must be in format <RemoteHostName>\<User>
+        [string]$LocalUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'    
+        )]
+        [ValidatePattern("\\")] # Must be in format <DomainShortName>\<User>
+        [string]$DomainUserName,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Local'    
+        )]
+        [securestring]$LocalPasswordSS,
+
+        [Parameter(
+            Mandatory=$True,
+            ParameterSetName='Domain'
+        )]
+        [securestring]$DomainPasswordSS,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("win", "macos", "linux", "ubuntu", "debian", "centos", "redhat")]
+        [string]$KeyFilePath,
+
+        [Parameter(Mandatory=$False)]
         [ValidateSet("Ubuntu1404","Ubuntu1604","Ubuntu1804","Ubuntu1810","Debian8","Debain9","CentOS7","RHEL7","OpenSUSE423","Fedora","Raspbian")]
-        $OS,
+        [string]$OS,
 
         [Parameter(Mandatory=$False)]
-        $ReleaseVersion,
+        [switch]$UsePackageManagement = $True,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("beta", "rc", "stable")]
-        $Channel,
-
-        [Parameter(Mandatory=$False)]
-        [int]$Iteration,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$Latest
+        [switch]$ConfigurePSRemoting
     )
 
     ##### BEGIN Native Helper Functions #####
@@ -179,31 +204,30 @@ function Update-PowerShellCore {
         return
     }
 
-    if (!$([Environment]::Is64BitProcess)) {
-        Write-Error "You are currently running the 32-bit version of PowerShell. Please run the 64-bit version found under C:\Windows\SysWOW64\WindowsPowerShell\v1.0 and try again. Halting!"
+    try {
+        $RemoteHostNetworkInfo = ResolveHost -HostNameOrIP $RemoteHostNameOrIP -ErrorAction Stop
+    }
+    catch {
+        Write-Error $_
+        Write-Error "Unable to resolve '$RemoteHostNameOrIP'! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
-    if ($Channel) {
-        if ($Channel -notmatch "beta|rc|stable") {
-            Write-Warning "The value provided for the -Channel parameter must be eitehr 'beta', 'rc', or 'stable'"
-            $Channel = Read-Host -Prompt "Please enter the Channel you would like to use [beta/rc/stable]"
-            while ($Channel -notmatch "beta|rc|stable") {
-                Write-Warning "The value provided for the -Channel parameter must be eitehr 'beta', 'rc', or 'stable'"
-                $Channel = Read-Host -Prompt "Please enter the Channel you would like to use [beta/rc/stable]"
-            }
+    if ($LocalUserName) {
+        if ($($LocalUserName -split "\\")[0] -ne $RemoteHostNetworkInfo.HostName) {
+            $ErrMsg = "The HostName indicated by -LocalUserName (i.e. $($($LocalUserName -split "\\")[0]) is not the same as " +
+            "the HostName as determined by network resolution (i.e. $($RemoteHostNetworkInfo.HostName))! Halting!"
+            Write-Error $ErrMsg
+            $global:FunctionResult = "1"
+            return
         }
     }
-
-    if (!$DownloadDirectory) {
-        $UsePackageManagement = $True
-    }
-
-    if ($DownloadDirectory) {
-        # Check to see if DownloadDirectory exists
-        if (!$(Test-Path $DownloadDirectory)) {
-            Write-Error "The path $DownloadDirectory was not found! Halting!"
+    if ($DomainUserName) {
+        if ($($DomainUserName -split "\\")[0] -ne $($RemoteHostNetworkInfo.Domain -split "\.")[0]) {
+            $ErrMsg = "The Domain indicated by -DomainUserName (i.e. '$($($DomainUserName -split "\\")[0])') is not the same as " +
+            "the Domain as determined by network resolution (i.e. '$($($RemoteHostNetworkInfo.Domain -split "\.")[0])')! Halting!"
+            Write-Error $ErrMsg
             $global:FunctionResult = "1"
             return
         }
@@ -286,7 +310,83 @@ function Update-PowerShellCore {
             $LinuxGenericArmPackageName = $RaspbianArmPackageName = $($_ -split '/')[-1]
         }
     }
-    
+
+    # Windows Install Info
+    $WindowsPMInstallScriptPrep = @(
+        'try {'
+        "    if (`$(Get-Module -ListAvailable).Name -notcontains 'ProgramManagement') {`$null = Install-Module ProgramManagement -ErrorAction Stop}"
+        "    if (`$(Get-Module).Name -notcontains 'ProgramManagement') {`$null = Import-Module ProgramManagement -ErrorAction Stop}"
+        '    Install-Program -ProgramName powershell-core -CommandName pwsh.exe'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        "    `$global:FunctionResult = '1'"
+        '    return'
+        '}'
+    )
+    $WindowsPMInstallScript = "powershell -NoProfile -Command \`"$($WindowsPMInstallScript -join '; ')\`""
+
+    $WindowsManualInstallScriptPrep = @(
+        "`$OutFilePath = Join-Path `$HOME 'Downloads\$Win64PackageName'"
+        "Invoke-WebRequest -Uri $Win64PackageUrl -OutFile `$OutFilePath"
+        '$DateStamp = Get-Date -Format yyyyMMddTHHmmss'
+        '$MSIFullPath = $OutFilePath'
+        '$MSIParentDir = $MSIFullPath | Split-Path -Parent'
+        '$MSIFileName = $MSIFullPath | Split-Path -Leaf'
+        "`$MSIFileNameOnly = `$MSIFileName -replace [regex]::Escape('.msi'),''"
+        "`$logFile = Join-Path `$MSIParentDir (`$MSIFileNameOnly + `$DateStamp + '.log')"
+        '$MSIArguments = @('
+        "    '/i'"
+        '    $MSIFullPath'
+        "    '/qn'"
+        "    '/norestart'"
+        "    '/L*v'"
+        '    $logFile'
+        ')'
+        'Start-Process msiexec.exe -ArgumentList $MSIArguments -Wait -NoNewWindow'
+    )
+    $WindowsManualInstallScript = "powershell -NoProfile -Command \`"$($WindowsManualInstallScriptPrep -join '; ')\`""
+
+    $WindowsUninstallScript = @(
+        'try {'
+        '    if ($(Get-Module -ListAvailable).Name -notcontains "ProgramManagement") {$null = Install-Module ProgramManagement -ErrorAction Stop}'
+        '    if ($(Get-Module).Name -notcontains "ProgramManagement") {$null = Import-Module ProgramManagement -ErrorAction Stop}'
+        '    Install-Program -ProgramName powershell-core -CommandName pwsh.exe'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        '    $global:FunctionResult = "1"'
+        '    return'
+        '}'
+        'try {'
+        '    Uninstall-Program -ProgramName powershell-core -ErrorAction Stop'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        '    $global:FunctionResult = "1"'
+        '    return'
+        '}'
+    )
+
+    $WindowsPwshRemotingScript = @(
+        'try {'
+        "    if (`$(Get-Module -ListAvailable).Name -notcontains 'WinSSH') {`$null = Install-Module WinSSH -ErrorAction Stop}"
+        "    if (`$(Get-Module).Name -notcontains 'WinSSH') {`$null = Import-Module WinSSH -ErrorAction Stop}"
+        '    Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh'
+        '}'
+        'catch {'
+        '    Write-Error $_'
+        "    `$global:FunctionResult = '1'"
+        '    return'
+        '}'
+    )
+
+    $Windows = [pscustomobject]@{
+        PackageManagerInstallScript = $WindowsPMInstallScript
+        ManualInstallScript         = $WindowsManualInstallScript
+        UninstallScript             = $WindowsUninstallScript
+        ConfigurePwshRemotingScript = $WindowsPwshRemotingScript
+    }
     
     # Ubuntu 14.04 Install Info
     $Ubuntu1404PMInstallScriptPrep = @(
@@ -299,120 +399,369 @@ function Update-PowerShellCore {
 
     $Ubuntu1404ManualInstallScriptPrep = @(
         "wget -q $Ubuntu1404PackageUrl"
-        'dpkg -i powershell_6.1.0-1.ubuntu.14.04_amd64.deb'
+        "dpkg -i $Ubuntu1404PackageName"
         'apt install -f'
     )
     $Ubuntu1404ManualInstallScript = "sudo bash -c `"$($Ubuntu1404ManualInstallScriptPrep -join '; ')`""
 
+    $Ubuntu1404UninstallScript = 'sudo apt remove powershell'
+
     $Ubuntu1404 = [pscustomobject]@{
-        PackageManagerInstallScript = 
-        ManualInstallScript = 
-    }
-    $RepoUrls = @{
-        Ubuntu1404      = "https://packages.microsoft.com/config/ubuntu/14.04/packages-microsoft-prod.deb"
-        Ubuntu1604      = ""
-        Ubuntu1804      = ""
-        Ubuntu1810      = ""
-        Debian8         = ""
-        Debian9         = ""
-        CentOS7         = ""
-        RHEL7           = ""
-        OpenSUSE423     = ""
-        Fedora          = ""
-        ArchLinux       = ""
-        Kali            = ""
+        PackageManagerInstallScript = $Ubuntu1404PMInstallScript
+        ManualInstallScript         = $Ubuntu1404ManualInstallScript
+        UninstallScript             = $Ubuntu1404UninstallScript
     }
 
-    if ($PSVersionTable.Platform -eq "Unix" -and $PSVersionTable.OS -notmatch "Darwin") {
-        try {
-            $CheckOS = $($(hostnamectl | grep "Operating System") -replace "Operating System:","").Trim()
+    # Ubuntu 16.04 Install Info
+    $Ubuntu1604PMInstallScriptPrep = @(
+        'wget -q https://packages.microsoft.com/config/ubuntu/16.04/packages-microsoft-prod.deb'
+        'dpkg -i packages-microsoft-prod.deb'
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Ubuntu1604PMInstallScript = "sudo bash -c `"$($Ubuntu1604PMInstallScript -join '; ')`""
+
+    $Ubuntu1604ManualInstallScriptPrep = @(
+        "wget -q $Ubuntu1604PackageUrl"
+        "dpkg -i $Ubuntu1604PackageName"
+        'apt install -f'
+    )
+    $Ubuntu1604ManualInstallScript = "sudo bash -c `"$($Ubuntu1604ManualInstallScriptPrep -join '; ')`""
+
+    $Ubuntu1604UninstallScript = 'sudo apt remove powershell'
+
+    $Ubuntu1604 = [pscustomobject]@{
+        PackageManagerInstallScript = $Ubuntu1604PMInstallScript
+        ManualInstallScript         = $Ubuntu1604ManualInstallScript
+        UninstallScript             = $Ubuntu1604UninstallScript
+    }
+
+    # Ubuntu 18.04 Install Info
+    $Ubuntu1804PMInstallScriptPrep = @(
+        'wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb'
+        'dpkg -i packages-microsoft-prod.deb'
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Ubuntu1804PMInstallScript = "sudo bash -c `"$($Ubuntu1804PMInstallScript -join '; ')`""
+
+    $Ubuntu1804ManualInstallScriptPrep = @(
+        "wget -q $Ubuntu1804PackageUrl"
+        "dpkg -i $Ubuntu1804PackageName"
+        'apt install -f'
+    )
+    $Ubuntu1804ManualInstallScript = "sudo bash -c `"$($Ubuntu1804ManualInstallScriptPrep -join '; ')`""
+
+    $Ubuntu1804UninstallScript = 'sudo apt remove powershell'
+
+    $Ubuntu1804 = [pscustomobject]@{
+        PackageManagerInstallScript = $Ubuntu1804PMInstallScript
+        ManualInstallScript         = $Ubuntu1804ManualInstallScript
+        UninstallScript             = $Ubuntu1804UninstallScript
+    }
+
+    # Debian 8 Install Info
+    $Debian8PMInstallScriptPrep = @(
+        'apt update'
+        'apt install curl apt-transport-https'
+        'curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -'
+        "sh -c 'echo `"deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-debian-jessie-prod jessie main`" > /etc/apt/sources.list.d/microsoft.list'"
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Debian8PMInstallScript = "sudo bash -c `"$($Debain8PMInstallScript -join '; ')`""
+
+    $Debian8ManualInstallScriptPrep = @(
+        "wget -q $Debian8PackageUrl"
+        "dpkg -i $Debian8PackageName"
+        'apt install -f'
+    )
+    $Debian8ManualInstallScript = "sudo bash -c `"$($Debian8ManualInstallScriptPrep -join '; ')`""
+
+    $Debian8UninstallScript = 'sudo apt remove powershell'
+
+    $Debian8 = [pscustomobject]@{
+        PackageManagerInstallScript = $Debian8PMInstallScript
+        ManualInstallScript         = $Debian8ManualInstallScript
+        UninstallScript             = $Debian8UninstallScript
+    }
+
+    # Debian 9 Install Info
+    $Debian9PMInstallScriptPrep = @(
+        'apt update'
+        'apt install install curl gnupg apt-transport-https'
+        'curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -'
+        "sh -c 'echo `"deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-debian-stretch-prod stretch main`" > /etc/apt/sources.list.d/microsoft.list'"
+        'apt update'
+        'apt install -y powershell'
+    )
+    $Debian9PMInstallScript = "sudo bash -c `"$($Debain9PMInstallScript -join '; ')`""
+
+    $Debian9ManualInstallScriptPrep = @(
+        "wget -q $Debian9PackageUrl"
+        "dpkg -i $Debian9PackageName"
+        'apt install -f'
+    )
+    $Debian9ManualInstallScript = "sudo bash -c `"$($Debian9ManualInstallScriptPrep -join '; ')`""
+
+    $Debian9UninstallScript = 'sudo apt remove powershell'
+
+    $Debian9 = [pscustomobject]@{
+        PackageManagerInstallScript = $Debian9PMInstallScript
+        ManualInstallScript         = $Debian9ManualInstallScript
+        UninstallScript             = $Debian9UninstallScript
+    }
+
+    # CentOS 7 and RHEL 7 Install Info
+    $CentOS7PMInstallScriptPrep = $RHELPMInstallScriptPrep = @(
+        'curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo tee /etc/yum.repos.d/microsoft.repo'
+        'yum install -y powershell'
+    )
+    $CentOS7PMInstallScript = $RHEL7PMInstallScript = "sudo bash -c `"$($CentOS7PMInstallScript -join '; ')`""
+
+    $CentOS7ManualInstallScriptPrep = $RHEL7ManualInstallScriptPrep = @(
+        "yum install $CentOS7PackageUrl"
+    )
+    $CentOS7ManualInstallScript = $RHEL7ManualInstallScript = "sudo bash -c `"$($CentOS7ManualInstallScriptPrep -join '; ')`""
+
+    $CentOS7UninstallScript = $RHEL7UninstallScript = 'sudo yum remove powershell'
+
+    $CentOS7 = $RHEL7 = [pscustomobject]@{
+        PackageManagerInstallScript = $CentOS7PMInstallScript
+        ManualInstallScript         = $CentOS7ManualInstallScript
+        UninstallScript             = $CentOS7UninstallScript
+    }
+
+    # OpenSUSE 42.3 Install Info
+    $OpenSUSE423PMInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        'zypper ar https://packages.microsoft.com/rhel/7/prod/'
+        'zypper update'
+        'zypper install powershell'
+    )
+    $OpenSUSE423PMInstallScript = "sudo bash -c `"$($OpenSUSE423PMInstallScript -join '; ')`""
+
+    $OpenSUSE423ManualInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        "zypper install $OpenSUSE423PackageUrl"
+    )
+    $OpenSUSE423ManualInstallScript = "sudo bash -c `"$($OpenSUSE423ManualInstallScriptPrep -join '; ')`""
+
+    $OpenSUSE423UninstallScript = 'sudo zypper remove powershell'
+
+    $OpenSUSE423 = [pscustomobject]@{
+        PackageManagerInstallScript = $OpenSUSE423PMInstallScript
+        ManualInstallScript         = $OpenSUSE423ManualInstallScript
+        UninstallScript             = $OpenSUSE423UninstallScript
+    }
+
+    # Fedora Install Info
+    $FedoraPMInstallScriptPrep = @(
+        'rpm --import https://packages.microsoft.com/keys/microsoft.asc'
+        'curl https://packages.microsoft.com/config/rhel/7/prod.repo | sudo tee /etc/yum.repos.d/microsoft.repo'
+        'dnf update'
+        'dnf install compat-openssl10'
+        'dnf install -y powershell'
+    )
+    $FedoraPMInstallScript = "sudo bash -c `"$($FedoraPMInstallScript -join '; ')`""
+
+    $FedoraManualInstallScriptPrep = @(
+        'dnf install compat-openssl10'
+        "dnf install $FedoraPackageUrl"
+    )
+    $FedoraManualInstallScript = "sudo bash -c `"$($FedoraManualInstallScriptPrep -join '; ')`""
+
+    $FedoraUninstallScript = 'sudo dnf remove powershell'
+
+    $Fedora = [pscustomobject]@{
+        PackageManagerInstallScript = $FedoraPMInstallScript
+        ManualInstallScript         = $FedoraManualInstallScript
+        UninstallScript             = $FedoraUninstallScript
+    }
+
+    # Raspbian Install Info
+    $RaspbianManualInstallScriptPrep = @(
+        'apt install libunwind8'
+        "wget -q $LinuxGenericArmPackageUrl"
+        'mkdir ~/powershell'
+        "tar -xvf ./$LinuxGenericArmPackageName -C ~/powershell"
+    )
+    $RaspbianManualInstallScript = "sudo bash -c `"$($RaspbianManualInstallScriptPrep -join '; ')`""
+
+    $RaspbianUninstallScript = 'rm -rf ~/powershell'
+
+    $Raspbian = [pscustomobject]@{
+        PackageManagerInstallScript = $null
+        ManualInstallScript         = $RaspbianManualInstallScript
+        UninstallScript             = $RaspbianUninstallScript
+    }
+
+    # Probe the Remote Host to get OS and Shell Info
+    try {
+        $GetSSHProbeSplatParams = @{
+            RemoteHostNameOrIP  = $RemoteHostNameOrIP
         }
-        catch {
-            try {
-                $CheckOS = $(uname -a).Trim()
+        if ($DomainUserName -and $DomainPasswordSS) {
+            $GetSSHProbeSplatParams.Add("DomainUserName",$DomainUserName)
+            $GetSSHProbeSplatParams.Add("DomainPasswordSS",$DomainPasswordSS)
+        }
+        if ($LocalUserName -and $LocalPasswordSS) {
+            $GetSSHProbeSplatParams.Add("LocalUserName",$LocalUserName)
+            $GetSSHProbeSplatParams.Add("LocalPasswordSS",$LocalPasswordSS)
+        }
+        if ($KeyFilePath) {
+            $GetSSHProbeSplatParams.Add("KeyFilePath",$KeyFilePath)
+        }
+        $OSCheck = Get-SSHProbe @GetSSHProbeSplatParams
+    }
+    catch {
+        Write-Error $_
+        $global:FunctionResult = "1"
+        return
+    }
+
+    # Linux ubuntu1804.localdomain 4.15.0-36-generic #39-Ubuntu SMP Mon Sep 24 16:19:09 UTC 2018 x86_64 x86_64 x86_64 GNU/Linux
+    # Linux Ubuntu16VM 4.10.0-35-generic #39~16.04.1-Ubuntu SMP Wed Sep 13 09:02:42 UTC 2017 x86_64 x86_64 x86_64 GNU/Linux
+    # Linux Debian8Jesse 3.16.0-4-amd64 #1 SMP Debian 3.16.43-2+deb8u1 (2017-06-18) x86_64 GNU/Linux
+    # Linux opensuse42 4.4.155-68-default #1 SMP Tue Sep 11 13:07:19 UTC 2018 (4ecc783) x86_64 x86_64 x86_64 GNU/Linux
+    <#
+    Static hostname: opensuse42.localdomain.localdomain
+    Transient hostname: opensuse42
+            Icon name: computer-vm
+            Chassis: vm
+            Machine ID: 39b1ead088e9fa0007c1399d5bb31e99
+            Boot ID: 15fb6ea1319443a293e194afec36d724
+        Virtualization: microsoft
+    Operating System: openSUSE Leap 42.3
+        CPE OS Name: cpe:/o:opensuse:leap:42.3
+                Kernel: Linux 4.4.155-68-default
+        Architecture: x86-64
+    #>
+    if (!$OS) {
+        switch ($OSCheck.OSVersionInfo) {
+            {$_ -match 'Microsoft|Windows'} {
+                $OS = "Windows"
+                $WindowsVersion = $OSCheck.OSVersionInfo
             }
-            catch {
-                $CheckOS = $PSVersionTable.OS
+
+            {$_ -match "Ubuntu 18\.04|18\.04\.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1804|Ubuntu.*18\.04|1804.*Ubuntu|18\.04.*Ubuntu"} {
+                $OS = "Ubuntu1804"
+                $UbuntuVersion = "18.04"
+            }
+
+            {$_ -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1604|Ubuntu.*16\.04|1604.*Ubuntu|16\.04.*Ubuntu"} {
+                $OS = "Ubuntu1604"
+                $UbuntuVersion = "16.04"
+            }
+
+            {$_ -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu" -or $_ -match "Ubuntu.*1404|Ubuntu.*14\.04|1404.*Ubuntu|14\.04.*Ubuntu"} {
+                $OS = "Ubuntu1404"
+                $UbuntuVersion = "14.04"
+            }
+
+            {$_ -match 'Debian GNU/Linux 8|\+deb8' -or $_ -match "jessie"} {
+                $OS = "Debian8"
+                $DebianVersion = "8"
+            }
+
+            {$_ -match 'Debian GNU/Linux 9|\+deb9' -or $_ -match "stretch"} {
+                $OS = "Debian9"
+                $DebianVersion = "9"
+            }
+
+            {$_ -match 'CentOS|\.el[0-9]\.'} {
+                $OS = "CentOS7"
+                $CentOSVersion = "7"
+            }
+
+            {$_ -match 'RedHat'} {
+                $OS = "RHEL7"
+                $RHELVersion = "7"
+            }
+
+            {$_ -match 'openSUSE|leap.*42\.3|Leap 42\.3|openSUSE Leap'} {
+                $OS = "OpenSUSE423"
+                $OpenSUSEVersion = "42.3"
+            }
+
+            {$_ -match 'Fedora 28|fedora:28'} {
+                $OS = "Fedora"
+                $FedoraVersion = "28"
+            }
+
+            {$_ -match 'Fedora 27|fedora:27'} {
+                $OS = "Fedora"
+                $FedoraVersion = "27"
+            }
+
+            {$_ -match 'armv.*GNU'} {
+                $OS = "Raspbian"
+                $RaspbianVersion = "stretch"
             }
         }
     }
 
     if (!$OS) {
-        if ($PSVersionTable.PSEdition -eq "Desktop" -or $PSVersionTable.OS -match "Windows" -or $PSVersionTable.PSVersion.Major -le 5) {
-            $OS = "win"
+        Write-Error "Unable to determine OS Version Information for $RemoteHostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+
+    # [ValidateSet("Ubuntu1404","Ubuntu1604","Ubuntu1804","Debian8","Debain9","CentOS7","RHEL7","OpenSUSE423","Fedora","Raspbian")]
+
+    if ($OSCheck.Platform -eq "Windows") {
+        if ($LocalPasswordSS) {
+            $LocalPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($LocalPasswordSS))
         }
-        if ($PSVersionTable.OS -match "Darwin") {
-            $OS = "macos"
+        If ($DomainPasswordSS) {
+            $DomainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainPasswordSS))
         }
-        if ($PSVersionTable.Platform -eq "Unix" -and $PSVersionTable.OS -notmatch "Darwin") {
-            switch ($CheckOS) {
-                {$_ -match "Ubuntu 18.04|18.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "18.04"
-                }
 
-                {$_ -match "Ubuntu 17.04|17.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "17.04"
-                }
+        if ($LocalUserName) {
+            $FullUserName = $($LocalUserName -split "\\")[-1]
+        }
+        if ($DomainUserName) {
+            $DomainNameShort = $($DomainUserName -split "\\")[0]
+            $FullUserName = $($DomainUserName -split "\\")[-1]
+        }
 
-                {$_ -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "16.04"
-                }
+        $HostNameValue = $RHostIP = @(
+            $RemoteHostNetworkInfo.IPAddressList | Where-Object {$_ -notmatch "^169"}
+        )[0]
 
-                {$_ -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu"} {
-                    $OS = "ubuntu"
-                    $UbuntuVersion = "14.04"
-                }
+        # This is what we're going for:
+        #     ssh pdadmin@192.168.2.10 "echo 'ConnectionSuccessful'"
+        [System.Collections.ArrayList]$SSHCmdStringArray = @(
+            'ssh'
+        )
+        if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+            $null = $SSHCmdStringArray.Add("-i")
+            $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
+        }
+        if ($LocalUserName) {
+            $null = $SSHCmdStringArray.Add("$FullUserName@$HostNameValue")
+        }
+        if ($DomainUserName) {
+            $null = $SSHCmdStringArray.Add("$FullUserName@$DomainNameShort@$HostNameValue")
+        }
 
-                {$_ -match 'Debian GNU/Linux 8|\+deb8'} {
-                    $OS = "debian"
-                    $DebianVersion = "8"
-                }
-
-                {$_ -match 'Debian GNU/Linux 9|\+deb9'} {
-                    $OS = "debian"
-                    $DebianVersion = "9"
-                }
-
-                {$_ -match 'CentOS|\.el[0-9]\.'} {
-                    $OS = "centos"
-                }
-
-                {$_ -match 'RedHat'} {
-                    $OS = "redhat"
-                }
-
-                Default {
-                    $OS = "linux"
-                }
+        if ($UsePackageManagement) {
+            if ($ConfigurePSRemoting) {
+                $SSHCmdString = $($SSHCmdStringArray -join " ") + ' "' + $Windows.WindowsPwshRemotingScript + '"'
             }
+            else {
+                $SSHCmdString = $($SSHCmdStringArray -join " ") + ' "' + $Windows.WindowsPMInstallScript + '"'
+            }
+            $PwshConfigResult = [scriptblock]::Create($SSHCmdString).InvokeReturnAsIs()
         }
     }
-    else {
-        switch ($OS) {
-            {$CheckOS -match "Ubuntu 17.04|17.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "17.04"
-            }
+    if ($OSCheck.Platform -eq "Linux") {
 
-            {$CheckOS -match "Ubuntu 16.04|16.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "16.04"
-            }
-
-            {$CheckOS -match "Ubuntu 14.04|14.04.[0-9]+-Ubuntu" -and $_ -eq "ubuntu"} {
-                $UbuntuVersion = "14.04"
-            }
-
-            {$_ -match 'Debian GNU/Linux 8|\+deb8'} {
-                $DebianVersion = "8"
-            }
-
-            {$_ -match 'Debian GNU/Linux 9|\+deb9'} {
-                $DebianVersion = "9"
-            }
-        }
     }
+
+
+
 
     if ($PSBoundParameters.Keys -contains "Latest") {
         $ReleaseVersion = $null
@@ -936,8 +1285,8 @@ function Update-PowerShellCore {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr5g47bt0SPpOIs9ShB9F0GeV
-# 6Dygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+j9tR/K10NkOcIk3gRoqfFX8
+# 7CCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -994,11 +1343,11 @@ function Update-PowerShellCore {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNYK8idBYmaioRrg
-# dFXuGq8FefGQMA0GCSqGSIb3DQEBAQUABIIBAFfVvsracmAl/d3dizfZ0Qivtzjg
-# aA7bjRur/wY/nA809fDJj39XDNraCoeag4pjZ85PAYKVhWimeyn+VsZAAC2zFcQ5
-# CGXvZGUznd/jxZCu20tc7a9I/pgJJTtAu1iHruJ0XEll66AyGaXqJJ80Qibk5UqW
-# Yz6cmpIJH0USEJhLwkGHVoWm5fzF9NA+fLTTq8b2RndtZHiqcVM6D4Ym3kKhkq/E
-# U73lg1Q7g4otVrf9ArX3a0LbjcuciOBMP3/qr5R4SrYxcwOkvEJEXTUxjSHHR3+r
-# I4LPdBN5SQoyUHcc6dMppqdAgivDfdmXWbaQ53VNwPqLKBoR4UUP2V4dXJI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFrsX1Mxl3EdBWn5
+# 0M9EPh2gbcVRMA0GCSqGSIb3DQEBAQUABIIBACGZ/KRF88M2kxP8Xk1jZUUFxpIx
+# jyt6FR2Ua5L2OosztC+MaEKMzVDxyxvLPkUBaAVPQhrSqHAi8z96GNjNH4KzozBm
+# w7iMJuf5FZSlNGzxiPJsJ+A9n4cT7GMMAexqP254CC1SxCMJLXz4rgIMJNJZ/+xs
+# Ybe4j5WneYGSL0kWa3eia35vrBijOMSh0Gz9mtKep6iIE5PkxgIUfG3z5W4MlSw6
+# W8O78RexnJYt+OsSbsUBTLUnM47J2uOV6zK3es8dIRpVLWo+dG3lLAiSPGdey2oM
+# 8FcWbT8Fs5yHfIpzvW9x+HmrxrzB3xXUEP8KlHVQX77EhHXC5rojEnyYSXk=
 # SIG # End signature block

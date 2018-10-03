@@ -12,7 +12,6 @@
     ${Function:GetNativePath}.Ast.Extent.Text
     ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetWorkingCredentials}.Ast.Extent.Text
-    ${Function:InitializeSSH}.Ast.Extent.Text
     ${Function:InstallFeatureDism}.Ast.Extent.Text
     ${Function:InvokeModuleDependencies}.Ast.Extent.Text
     ${Function:InvokePSCompatibility}.Ast.Extent.Text
@@ -49,6 +48,7 @@
     ${Function:Get-RemoteDesktop}.Ast.Extent.Text
     ${Function:Get-ScheduledTasks}.Ast.Extent.Text
     ${Function:Get-ServerInventory}.Ast.Extent.Text
+    ${Function:Get-SSHProbe}.Ast.Extent.Text
     ${Function:Get-StorageDisk}.Ast.Extent.Text
     ${Function:Get-StorageFileShare}.Ast.Extent.Text
     ${Function:Get-StorageVolume}.Ast.Extent.Text
@@ -79,8 +79,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7+qZHYQBMXzl8RwImoXNwMVD
-# Me6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjx85wOTF5cigVJUzDWn+3wWb
+# 16Sgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -137,11 +137,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJfW/tAoVp2YVyHS
-# kbFETTce/LHNMA0GCSqGSIb3DQEBAQUABIIBAJJz+8Vo6cdEekJTMWZ2LmKy3ZBq
-# yp3h2iVxZiLENCaQtYH4oz3zRadCdpuy1AdUO4Ff5cBQn+Za92PPzIz2LdzDpQVo
-# VLmEM9SZGoU7+sKIUs1qWbZJ7MfceGpOwvzt141IPv717LgUp3kVlC+PK8qxMf1c
-# UYMAc5GrC809mqbRG4XllP73D9XJ7YAR1zzMTBoG8oUDDXk22CTGlpJBjISVcR8J
-# LPyR64YnnNjFaJ6TD3bOUWqgfLhSw2R4I1N02CJ2dMjDjM9VwPWpnYuR30mHQnTM
-# uMmmStBqc7pxxrJK0keFt9pWA2cLOwhJl6AfgE2bZl69nhi7Ydv7zFuH6eY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFL6g1t+mQGvyYyWL
+# 3s5l80nBAGK6MA0GCSqGSIb3DQEBAQUABIIBAIB3YfPHKAs3IdkemD5bTWKgENY1
+# mIPoat+YDXju2YAfFMwo0ZmO+bIbO/EgC32TslI1uw+nBTETY4Y1gB3ve/iltcam
+# cCgeyoFnWskMb6Uiax0Rf0YpSwFC13JrCCTyJw3B+ASFEr6FCvKNg2dtylQhvJUU
+# rSYE8e5lhDHYdm1SZ8nSLc7pBq7O+nS2wLOl/mb7DtPYQDsT6BhzATKLb+XBryjf
+# RfGnrdHDgfXdlDbsoaY+K8G9ouNwB4lbQIUnJ8v3by1r0m/BrfboZrw3ex4CGb+v
+# va1xr+1rrFuW5SaA5mvGNQz0GYMhvIWugSAcmHzUQk/Wpu+9SL3vqTGtsfQ=
 # SIG # End signature block
