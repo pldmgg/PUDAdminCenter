@@ -53,6 +53,12 @@ function Get-SSHProbe {
         return
     }
 
+    if ($LocalPasswordSS -or $DomainPasswordSS -and $KeyFilePath) {
+        Write-Error "Please use EITHER -KeyFilePath OR -LocalPasswordSS/-DomainPasswordSS in order to ssh to $RemoteHostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     if ($LocalUserName) {
         if ($($LocalUserName -split "\\")[0] -ne $RemoteHostNetworkInfo.HostName) {
             $ErrMsg = "The HostName indicated by -LocalUserName (i.e. $($($LocalUserName -split "\\")[0]) is not the same as " +
@@ -241,14 +247,14 @@ function Get-SSHProbe {
             ) {
                 $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                 $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
-                if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]") {
+                if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]") {
                     break
                 }
                 Start-Sleep -Seconds 1
                 $Counter++
             }
             if ($Counter -eq 31) {
-                Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
+                Write-Verbose "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
                 
                 if ($PSAwaitProcess.Id) {
                     try {
@@ -284,7 +290,7 @@ function Get-SSHProbe {
             
             # If $CheckResponsesOutput contains the string "must be greater than zero", then something broke with the Await Module.
             # Most of the time, just trying again resolves any issues
-            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]" -and
             ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
                 if ($PSAwaitProcess.Id) {
                     try {
@@ -334,7 +340,7 @@ function Get-SSHProbe {
                     $Counter++
                 }
                 if ($Counter -eq 31) {
-                    Write-Warning "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
+                    Write-Verbose "SSH via 'pwsh -c {Invoke-Command ...}' timed out!"
                     
                     if ($PSAwaitProcess.Id) {
                         try {
@@ -369,7 +375,7 @@ function Get-SSHProbe {
             }
 
             # At this point, if we don't have the expected output, we need to fail
-            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]" -and
             ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
                 Write-Error "Something went wrong with the PowerShell Await Module! Halting!"
                 $global:FunctionResult = "1"
@@ -683,7 +689,7 @@ function Get-SSHProbe {
             [System.Collections.ArrayList]$SSHCmdStringArray = @(
                 'ssh'
             )
-            if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+            if ($KeyFilePath) {
                 $null = $SSHCmdStringArray.Add("-i")
                 $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
             }
@@ -742,15 +748,15 @@ function Get-SSHProbe {
             ) {
                 $SuccessOrAcceptHostKeyOrPwdPrompt = Receive-AwaitResponse
                 $null = $CheckForExpectedResponses.Add($SuccessOrAcceptHostKeyOrPwdPrompt)
-                if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]") {
+                if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]") {
                     break
                 }
                 Start-Sleep -Seconds 1
                 $Counter++
             }
             if ($Counter -eq 31) {
-                Write-Warning "SSH via 'ssh -t ...' timed out!"
-                
+                Write-Verbose "SSH via '$($SSHCmdStringArray -join " ")' timed out!"
+
                 if ($PSAwaitProcess.Id) {
                     try {
                         $null = Stop-AwaitSession
@@ -781,7 +787,7 @@ function Get-SSHProbe {
             
             # If $CheckResponsesOutput contains the string "must be greater than zero", then something broke with the Await Module.
             # Most of the time, just trying again resolves any issues
-            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]" -and
             ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
                 if ($PSAwaitProcess.Id) {
                     try {
@@ -831,8 +837,9 @@ function Get-SSHProbe {
                     $Counter++
                 }
                 if ($Counter -eq 31) {
-                    Write-Warning "SSH via 'ssh -t ...' timed out!"
-                    
+                    Write-Error "SSH via '$($SSHCmdStringArray -join " ")' timed out!"
+                    $global:FunctionResult = "1"
+
                     if ($PSAwaitProcess.Id) {
                         try {
                             $null = Stop-AwaitSession
@@ -854,6 +861,8 @@ function Get-SSHProbe {
                             }
                         }
                     }
+
+                    return
                 }
             }
 
@@ -862,7 +871,7 @@ function Get-SSHProbe {
             $CheckResponsesOutput = $CheckForExpectedResponses | foreach {$_ -split "`n"}
 
             # At this point, if we don't have the expected output, we need to fail
-            if ($CheckResponsesOutput -match "must be greater than zero" -or $CheckResponsesOutput[-1] -notmatch "[a-zA-Z]" -and
+            if ($CheckResponsesOutput -match "must be greater than zero" -or @($CheckResponsesOutput)[-1] -notmatch "[a-zA-Z]" -and
             ![bool]$($CheckResponsesOutput -match "background process reported an error")) {
                 Write-Error "Something went wrong with the PowerShell Await Module! Halting!"
                 $global:FunctionResult = "1"
@@ -1295,7 +1304,7 @@ function Get-SSHProbe {
             [System.Collections.ArrayList]$SSHCmdStringArray = @(
                 'ssh'
             )
-            if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+            if ($KeyFilePath) {
                 $null = $SSHCmdStringArray.Add("-i")
                 $null = $SSHCmdStringArray.Add("'" + $KeyFilePath + "'")
             }
@@ -1418,77 +1427,53 @@ function Get-SSHProbe {
     else {
         Write-Error "Unable to test SSH! Halting!"
         $global:FunctionResult = "1"
+
+        if ($PSAwaitProcess.Id) {
+            try {
+                $null = Stop-AwaitSession
+            }
+            catch {
+                if ($PSAwaitProcess.Id -eq $PID) {
+                    Write-Error "The PSAwaitSession never spawned! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+                else {
+                    if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                        Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                    }
+                    while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                        Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                        Start-Sleep -Seconds 1
+                    }
+                }
+            }
+        }
+
         return
+    }
+
+    if ($PSAwaitProcess.Id) {
+        try {
+            $null = Stop-AwaitSession
+        }
+        catch {
+            if ($PSAwaitProcess.Id -eq $PID) {
+                Write-Error "The PSAwaitSession never spawned! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+            else {
+                if ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                    Stop-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue
+                }
+                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
+                    Write-Verbose "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
+                    Start-Sleep -Seconds 1
+                }
+            }
+        }
     }
 
     $FinalOutput
 }
-# SIG # Begin signature block
-# MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvpm4hkA1hn7F4V/ukzzI3HZR
-# k7+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
-# 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
-# CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
-# CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
-# B1plcm9TQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDCwqv+ROc1
-# bpJmKx+8rPUUfT3kPSUYeDxY8GXU2RrWcL5TSZ6AVJsvNpj+7d94OEmPZate7h4d
-# gJnhCSyh2/3v0BHBdgPzLcveLpxPiSWpTnqSWlLUW2NMFRRojZRscdA+e+9QotOB
-# aZmnLDrlePQe5W7S1CxbVu+W0H5/ukte5h6gsKa0ktNJ6X9nOPiGBMn1LcZV/Ksl
-# lUyuTc7KKYydYjbSSv2rQ4qmZCQHqxyNWVub1IiEP7ClqCYqeCdsTtfw4Y3WKxDI
-# JaPmWzlHNs0nkEjvnAJhsRdLFbvY5C2KJIenxR0gA79U8Xd6+cZanrBUNbUC8GCN
-# wYkYp4A4Jx+9AgMBAAGjggEqMIIBJjASBgkrBgEEAYI3FQEEBQIDAQABMCMGCSsG
-# AQQBgjcVAgQWBBQ/0jsn2LS8aZiDw0omqt9+KWpj3DAdBgNVHQ4EFgQUicLX4r2C
-# Kn0Zf5NYut8n7bkyhf4wGQYJKwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwDgYDVR0P
-# AQH/BAQDAgGGMA8GA1UdEwEB/wQFMAMBAf8wHwYDVR0jBBgwFoAUdpW6phL2RQNF
-# 7AZBgQV4tgr7OE0wMQYDVR0fBCowKDAmoCSgIoYgaHR0cDovL3BraS9jZXJ0ZGF0
-# YS9aZXJvREMwMS5jcmwwPAYIKwYBBQUHAQEEMDAuMCwGCCsGAQUFBzAChiBodHRw
-# Oi8vcGtpL2NlcnRkYXRhL1plcm9EQzAxLmNydDANBgkqhkiG9w0BAQsFAAOCAQEA
-# tyX7aHk8vUM2WTQKINtrHKJJi29HaxhPaHrNZ0c32H70YZoFFaryM0GMowEaDbj0
-# a3ShBuQWfW7bD7Z4DmNc5Q6cp7JeDKSZHwe5JWFGrl7DlSFSab/+a0GQgtG05dXW
-# YVQsrwgfTDRXkmpLQxvSxAbxKiGrnuS+kaYmzRVDYWSZHwHFNgxeZ/La9/8FdCir
-# MXdJEAGzG+9TwO9JvJSyoGTzu7n93IQp6QteRlaYVemd5/fYqBhtskk1zDiv9edk
-# mHHpRWf9Xo94ZPEy7BqmDuixm4LdmmzIcFWqGGMo51hvzz0EaE8K5HuNvNaUB/hq
-# MTOIB5145K8bFOoKHO4LkTCCBc8wggS3oAMCAQICE1gAAAH5oOvjAv3166MAAQAA
-# AfkwDQYJKoZIhvcNAQELBQAwPTETMBEGCgmSJomT8ixkARkWA0xBQjEUMBIGCgmS
-# JomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EwHhcNMTcwOTIwMjE0MTIy
-# WhcNMTkwOTIwMjExMzU4WjBpMQswCQYDVQQGEwJVUzELMAkGA1UECBMCUEExFTAT
-# BgNVBAcTDFBoaWxhZGVscGhpYTEVMBMGA1UEChMMRGlNYWdnaW8gSW5jMQswCQYD
-# VQQLEwJJVDESMBAGA1UEAxMJWmVyb0NvZGUyMIIBIjANBgkqhkiG9w0BAQEFAAOC
-# AQ8AMIIBCgKCAQEAxX0+4yas6xfiaNVVVZJB2aRK+gS3iEMLx8wMF3kLJYLJyR+l
-# rcGF/x3gMxcvkKJQouLuChjh2+i7Ra1aO37ch3X3KDMZIoWrSzbbvqdBlwax7Gsm
-# BdLH9HZimSMCVgux0IfkClvnOlrc7Wpv1jqgvseRku5YKnNm1JD+91JDp/hBWRxR
-# 3Qg2OR667FJd1Q/5FWwAdrzoQbFUuvAyeVl7TNW0n1XUHRgq9+ZYawb+fxl1ruTj
-# 3MoktaLVzFKWqeHPKvgUTTnXvEbLh9RzX1eApZfTJmnUjBcl1tCQbSzLYkfJlJO6
-# eRUHZwojUK+TkidfklU2SpgvyJm2DhCtssFWiQIDAQABo4ICmjCCApYwDgYDVR0P
-# AQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMB0GA1UdDgQWBBS5d2bhatXq
-# eUDFo9KltQWHthbPKzAfBgNVHSMEGDAWgBSJwtfivYIqfRl/k1i63yftuTKF/jCB
-# 6QYDVR0fBIHhMIHeMIHboIHYoIHVhoGubGRhcDovLy9DTj1aZXJvU0NBKDEpLENO
-# PVplcm9TQ0EsQ049Q0RQLENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNl
-# cnZpY2VzLENOPUNvbmZpZ3VyYXRpb24sREM9emVybyxEQz1sYWI/Y2VydGlmaWNh
-# dGVSZXZvY2F0aW9uTGlzdD9iYXNlP29iamVjdENsYXNzPWNSTERpc3RyaWJ1dGlv
-# blBvaW50hiJodHRwOi8vcGtpL2NlcnRkYXRhL1plcm9TQ0EoMSkuY3JsMIHmBggr
-# BgEFBQcBAQSB2TCB1jCBowYIKwYBBQUHMAKGgZZsZGFwOi8vL0NOPVplcm9TQ0Es
-# Q049QUlBLENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNlcnZpY2VzLENO
-# PUNvbmZpZ3VyYXRpb24sREM9emVybyxEQz1sYWI/Y0FDZXJ0aWZpY2F0ZT9iYXNl
-# P29iamVjdENsYXNzPWNlcnRpZmljYXRpb25BdXRob3JpdHkwLgYIKwYBBQUHMAKG
-# Imh0dHA6Ly9wa2kvY2VydGRhdGEvWmVyb1NDQSgxKS5jcnQwPQYJKwYBBAGCNxUH
-# BDAwLgYmKwYBBAGCNxUIg7j0P4Sb8nmD8Y84g7C3MobRzXiBJ6HzzB+P2VUCAWQC
-# AQUwGwYJKwYBBAGCNxUKBA4wDDAKBggrBgEFBQcDAzANBgkqhkiG9w0BAQsFAAOC
-# AQEAszRRF+YTPhd9UbkJZy/pZQIqTjpXLpbhxWzs1ECTwtIbJPiI4dhAVAjrzkGj
-# DyXYWmpnNsyk19qE82AX75G9FLESfHbtesUXnrhbnsov4/D/qmXk/1KD9CE0lQHF
-# Lu2DvOsdf2mp2pjdeBgKMRuy4cZ0VCc/myO7uy7dq0CvVdXRsQC6Fqtr7yob9NbE
-# OdUYDBAGrt5ZAkw5YeL8H9E3JLGXtE7ir3ksT6Ki1mont2epJfHkO5JkmOI6XVtg
-# anuOGbo62885BOiXLu5+H2Fg+8ueTP40zFhfLh3e3Kj6Lm/NdovqqTBAsk04tFW9
-# Hp4gWfVc0gTDwok3rHOrfIY35TGCAfUwggHxAgEBMFQwPTETMBEGCgmSJomT8ixk
-# ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
-# E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
-# CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGWeBs3TuqFVeAzY
-# Mo1Oek3Bqgd4MA0GCSqGSIb3DQEBAQUABIIBAHS4zB/CvE0QrI/xvCUhpVQaxLTa
-# W5vMutIQhzN4mc+q7CMsEGwOkdK2lSGvxbEzgRVK1vzkpo4RimzHAi0UNcuC4cl0
-# 2vmVGM3LRSof4Ok7gqE+LKFWc6mhQjSN0nJt2TAbNImO2E8S0LstESEfx8XWEQrb
-# iVw0RdhrrN62PfZXSZCq/Gyzpb4+qxaiu5rhx6+kqxXrI81nwD2mpWn3P2BhoD2N
-# K0Tax7S28CRm2cFTs3nVnbYTU/YW3pL/9TmgChmKu56myvASX7jZ+OTSZYGX+M+a
-# aG6tLm9+PgENigCUvJzntUZHVqReCq4o7E7dygQ/SU65BoxfiEImJIX17Wg=
-# SIG # End signature block

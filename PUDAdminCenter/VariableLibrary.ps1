@@ -24,6 +24,7 @@
     ${Function:TestPort}.Ast.Extent.Text
     ${Function:TestSSH}.Ast.Extent.Text
     ${Function:UnzipFile}.Ast.Extent.Text
+    ${Function:Bootstrap-PowerShellCore}.Ast.Extent.Text
     ${Function:Configure-PwshRemotingCrossPlatform}.Ast.Extent.Text
     ${Function:Download-NuGetPackage}.Ast.Extent.Text
     ${Function:Get-CertificateOverview}.Ast.Extent.Text
@@ -62,7 +63,6 @@
     ${Function:Set-RemoteDesktop}.Ast.Extent.Text
     ${Function:Start-DiskPerf}.Ast.Extent.Text
     ${Function:Stop-DiskPerf}.Ast.Extent.Text
-    ${Function:Update-PowerShellCore}.Ast.Extent.Text
 )
 
 $RequiredLinuxCommands = @(

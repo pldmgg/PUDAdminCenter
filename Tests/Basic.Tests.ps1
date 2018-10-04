@@ -84,6 +84,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'TestSSH' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
         
+        $Commands -contains 'Bootstrap-PowerShellCore' | Should Be $True
         $Commands -contains 'Configure-PwshRemotingCrossPlatform' | Should Be $True
         $Commands -contains 'Download-NuGetPackage' | Should Be $True
         $Commands -contains 'Get-CertificateOverview' | Should Be $True
@@ -122,7 +123,6 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Set-RemoteDesktop' | Should Be $True
         $Commands -contains 'Start-DiskPerf' | Should Be $True
         $Commands -contains 'Stop-DiskPerf' | Should Be $True
-        $Commands -contains 'Update-PowerShellCore' | Should Be $True
     }
 
     It "Module '$env:BHProjectName' Private Functions Are Available in Internal Scope" {
