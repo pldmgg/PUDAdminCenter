@@ -468,7 +468,7 @@ $PSRemotingCredsPageContent = {
                 New-UDInputField -Type textbox -Name 'Domain_UserName' -Value $null
                 New-UDInputField -Type password -Name 'Domain_Password' -Value $null
                 New-UDInputField -Type textbox -Name 'VaultServerUrl' -Value $null
-                New-UDInputField -Type select -Name 'Preferred_PSRemotingCredType' -Values @("Local","Domain","SSHCertificate") -DefaultValue "Domain"
+                New-UDInputField -Type select -Name 'Preferred_PSRemotingCredType' -Values @("Local","Domain","SSHKey") -DefaultValue "Domain"
 
                 [System.Collections.ArrayList]$PSRemotingMethodValues = @()
                 if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
@@ -563,7 +563,7 @@ $PSRemotingCredsPageContent = {
                 #>
                 
                 if ($Preferred_PSRemotingMethod -eq "SSH") {
-                    if ($Preferred_PSRemotingCredType -ne "SSHCertificate") {
+                    if ($Preferred_PSRemotingCredType -ne "SSHKey") {
                         $Preferred_PSRemotingCredType = "SSHUserNameAndPassword"
                     }
                     
@@ -656,14 +656,16 @@ $PSRemotingCredsPageContent = {
                             $DomainAdminCreds = [pscredential]::new($Domain_UserName,$DomainPwdSecureString)
                         }
                     }
-                    if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+                    if ($Preferred_PSRemotingCredType -eq "SSHKey") {
                         if (!$Domain_UserName -or !$Domain_Password) {
-                            New-UDInputAction -Toast "You specifed your Preferred_PSRemotingCredType as '$Preferred_PSRemotingCredType', which means you must provide Domain_UserName and Domain_Password!" -Duration 10000
+                            $UDInputActionMsg = "You specifed your Preferred_PSRemotingCredType as '$Preferred_PSRemotingCredType', which means you must provide Domain_UserName " +
+                            "and Domain_Password in order to request and sign new SSH Keys from the VaultServer!"
+                            New-UDInputAction -Toast $UDInputActionMsg -Duration 10000
                             Sync-UDElement -Id "CredsForm"
                             return
                         }
                         if (!$VaultServerUrl) {
-                            New-UDInputAction -Toast "You must provide the VaultServerUrl in order to generate/request/receive a new SSH Certificate!" -Duration 10000
+                            New-UDInputAction -Toast "You must provide the VaultServerUrl in order to generate/request/receive a temporary SSH Keys for $Session:ThisRemoteHost!" -Duration 10000
                             Sync-UDElement -Id "CredsForm"
                             return
                         }
@@ -759,7 +761,7 @@ $PSRemotingCredsPageContent = {
                         }
                     }
 
-                    if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+                    if ($Preferred_PSRemotingCredType -eq "SSHKey") {
                         # Use Domain Credentials to get a new Vault Server Authentication Token, generate new SSH Keys on the PUDAdminCenter Server,
                         # have the Vault Server sign them, add the new private key to the ssh-agent, and output an SSH Public Certificate to $HOME\.ssh
                         # NOTE: The SSH Keys will expire in 24 hours
@@ -914,32 +916,13 @@ $PSRemotingCredsPageContent = {
                 }
 
                 ##### Test the Credentials #####
-
-                # IMPORTANT NOTE: OpenSSH-Win64's implementation of 'ssh.exe -t' does not work properly...If it did, the TestSSH Private function would be a lot simpler
                             
                 # NOTE: The Principal(s) on the SSH Certificate do NOT determine who you are on the Remote Host. What DOES determine who you are on the Remote Host is
                 # 1) The UserName specified via -UserName with *-PSSession cmdlets
                 # 2) The UserName specified via <UserName>@<DomainShortName>@<RemoteHost> with ssh.exe
 
                 if ($Preferred_PSRemotingMethod -eq "SSH") {
-                    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
-                        # Make sure we have pwsh
-                        if (!$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
-                            $InstallPwshResult = Install-Program -ProgramName powershell-core -CommandName pwsh.exe -ExpectedInstallLocation "C:\Program Files\PowerShell"
-                        }
-                        
-                        # NOTE: The Await Module comes with the WinSSH Module that we made sure was installed/imported earlier
-                        try {
-                            Import-Module "$($(Get-Module WinSSH).ModuleBase)\Await\Await.psd1" -ErrorAction Stop
-                        }
-                        catch {
-                            New-UDInputAction -Toast "Unable to load the Await Module! Halting!" -Duration 10000
-                            Sync-UDElement -Id "CredsForm"
-                            return
-                        }
-                    }
-
-                    if ($Preferred_PSRemotingCredType -eq "SSHCertificate") {
+                    if ($Preferred_PSRemotingCredType -eq "SSHKey") {
                         # Determine if we're going to do UserName/Password Auth or SSH Certificate Auth
                         if (!$UserNamePasswordRequired) {
                             # We need to get the UserName from the SSHCertificate

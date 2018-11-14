@@ -1,7 +1,7 @@
 [System.Collections.ArrayList]$script:FunctionsForSBUse = @(
     ${Function:AddWinRMTrustedHost}.Ast.Extent.Text
     ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
-    ${Function:CheckSudoStatus}.Ast.Extent.Text
+    ${Function:DownloadNuGetPackage}.Ast.Extent.Text
     ${Function:EnableWinRMViaRPC}.Ast.Extent.Text
     ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
     ${Function:GetDomainController}.Ast.Extent.Text
@@ -17,16 +17,11 @@
     ${Function:InvokePSCompatibility}.Ast.Extent.Text
     ${Function:ManualPSGalleryModuleInstall}.Ast.Extent.Text
     ${Function:NewUniqueString}.Ast.Extent.Text
-    ${Function:RemoveSudoPwd}.Ast.Extent.Text
     ${Function:ResolveHost}.Ast.Extent.Text
     ${Function:TestIsValidIPAddress}.Ast.Extent.Text
     ${Function:TestLDAP}.Ast.Extent.Text
     ${Function:TestPort}.Ast.Extent.Text
-    ${Function:TestSSH}.Ast.Extent.Text
     ${Function:UnzipFile}.Ast.Extent.Text
-    ${Function:Bootstrap-PowerShellCore}.Ast.Extent.Text
-    ${Function:Configure-PwshRemotingCrossPlatform}.Ast.Extent.Text
-    ${Function:Download-NuGetPackage}.Ast.Extent.Text
     ${Function:Get-CertificateOverview}.Ast.Extent.Text
     ${Function:Get-Certificates}.Ast.Extent.Text
     ${Function:Get-CimPnpEntity}.Ast.Extent.Text
@@ -49,7 +44,6 @@
     ${Function:Get-RemoteDesktop}.Ast.Extent.Text
     ${Function:Get-ScheduledTasks}.Ast.Extent.Text
     ${Function:Get-ServerInventory}.Ast.Extent.Text
-    ${Function:Get-SSHProbe}.Ast.Extent.Text
     ${Function:Get-StorageDisk}.Ast.Extent.Text
     ${Function:Get-StorageFileShare}.Ast.Extent.Text
     ${Function:Get-StorageVolume}.Ast.Extent.Text
@@ -79,8 +73,8 @@ $RequiredLinuxCommands = @(
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjx85wOTF5cigVJUzDWn+3wWb
-# 16Sgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpJPX+WfWotpQZv2XIccPsf0N
+# pZ6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -137,11 +131,11 @@ $RequiredLinuxCommands = @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFL6g1t+mQGvyYyWL
-# 3s5l80nBAGK6MA0GCSqGSIb3DQEBAQUABIIBAIB3YfPHKAs3IdkemD5bTWKgENY1
-# mIPoat+YDXju2YAfFMwo0ZmO+bIbO/EgC32TslI1uw+nBTETY4Y1gB3ve/iltcam
-# cCgeyoFnWskMb6Uiax0Rf0YpSwFC13JrCCTyJw3B+ASFEr6FCvKNg2dtylQhvJUU
-# rSYE8e5lhDHYdm1SZ8nSLc7pBq7O+nS2wLOl/mb7DtPYQDsT6BhzATKLb+XBryjf
-# RfGnrdHDgfXdlDbsoaY+K8G9ouNwB4lbQIUnJ8v3by1r0m/BrfboZrw3ex4CGb+v
-# va1xr+1rrFuW5SaA5mvGNQz0GYMhvIWugSAcmHzUQk/Wpu+9SL3vqTGtsfQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCuE4dbobmOwbWzB
+# FAO8TuD9cw6QMA0GCSqGSIb3DQEBAQUABIIBAME1Ho6zlXruSJdnfizp4Qm2AGo4
+# 5gdbHUsAL/TyVWuD7x4WgtFRapDRGaV1lZhA40pBTt0qVU6E/9zkt1/QWSxys6JM
+# 5EGvsXSKsi6wXjFedlV4L3s/H88ZneasLquu9M8g5alHTGYk9mIBewLbOZTKZmfv
+# zILSX7wxeW+Ozo+8oez7YOKMy9pYbUh1FSIAJmoo/kBeGAFoCUAwNh0PSUoEj0uE
+# h5Ys5BcDry7lH5lQq/DaaaIPEn+cUk4Qm6pXSovqJVz4XMhfY7EpbQvyuw/xwtmE
+# msK/7vwaEOZiHWeSf0lz0wjruoO/2d3DREKqJS6d5lVT13Yo08xHkerR8V8=
 # SIG # End signature block

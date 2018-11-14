@@ -20,7 +20,7 @@ function InstallLinuxPackage {
                 $null = dnf -y install $PackageName *> $null
             }
             elseif ($(command -v apt)) {
-                $null = apt -y install $PackageName *> $null
+                $null = apt-get -y install $PackageName *> $null
             }
             elseif ($(command -v zypper)) {
                 $null = zypper install $PackageName --non-interactive *> $null
@@ -49,8 +49,8 @@ function InstallLinuxPackage {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUklze0qz5uhXuGbU9E8n7LsP6
-# vVagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5k7VUMgYCifyKSjNX976rDkz
+# wvegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -107,11 +107,11 @@ function InstallLinuxPackage {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFAt9jxW0h1fnPA4
-# HpJoa3wevkKaMA0GCSqGSIb3DQEBAQUABIIBALpQljmR5YXEaV5oWfdYyYahTECw
-# NXnla74DlKOn55rCtEwJ1Z4XMnOLgTowam69BH0p0L1vJgF3yoRRwZYMwB/7fkwH
-# Bo9H9tSjdo7qzpfJOfY6mnUGdccb2OG28vjiwzsIzICW0K5Gy8JcR2DY22IXsYgr
-# c5cGg1CuGp0uLA8Fvo86YTkneekPDzi4J4FdWz/Arovg72pD6UZLXmxyQ077rWRf
-# rKZvXvbdGploFsXqUW4f6GYjJvlChKjRa56xm2IEuGIElXzx/YPKJB3/MH2ZUWTm
-# lvl1AxUgz8uC78xZHTmMNFFgUJFErsSP1FGhdi5u1M4D9cQzf4Dta/iPGcc=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNd9QqCHNLi8cB8A
+# OT2RbaNpI3l6MA0GCSqGSIb3DQEBAQUABIIBAJtyFj56qzYJBhsUPIhA1yz6vn8v
+# oVwSPlHZx9Gp1L+G+wIbFOC1PVWB8HtPoZByksN8LqAY4LT4lYHYZWRNvU8y7xWy
+# nvkBcYEbpAc+zIU8mKK5Fm2erC0uakLqTjDBjwt7ZNoKcf+K+FyCdojBwCpYUiVO
+# xlph/9jTi0a8/0XSgQAOGNH1bkvkga+IpyYry977jCvim7qhtHSkdZfNe0wHlet6
+# bR3kZ2M1ZoRhTfmaIohxzAdLNCpqfIcaHO60cQfYHAsxA8UKoF5G4Q7lr/y6mygF
+# +SER22ECYIQgVZTSOij1bBDwuSqnrX8TwUaHJjC9zGo3DMROmecqKBdB0e0=
 # SIG # End signature block

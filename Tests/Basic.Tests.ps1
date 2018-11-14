@@ -59,7 +59,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands = $Module.ExportedCommands.Keys
         $Commands -contains 'AddWinRMTrustedHost' | Should Be $False
         $Commands -contains 'AddWinRMTrustLocalHost' | Should Be $False
-        $Commands -contains 'CheckSudoStatus' | Should Be $False
+        $Commands -contains 'DownloadNuGetPackage' | Should Be $False
         $Commands -contains 'EnableWinRMViaRPC' | Should Be $False
         $Commands -contains 'GetComputerObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetDomainController' | Should Be $False
@@ -76,17 +76,12 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'InvokePSCompatibility' | Should Be $False
         $Commands -contains 'ManualPSGalleryModuleInstall' | Should Be $False
         $Commands -contains 'NewUniqueString' | Should Be $False
-        $Commands -contains 'RemoveSudoPwd' | Should Be $False
         $Commands -contains 'ResolveHost' | Should Be $False
         $Commands -contains 'TestIsValidIPAddress' | Should Be $False
         $Commands -contains 'TestLDAP' | Should Be $False
         $Commands -contains 'TestPort' | Should Be $False
-        $Commands -contains 'TestSSH' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
         
-        $Commands -contains 'Bootstrap-PowerShellCore' | Should Be $True
-        $Commands -contains 'Configure-PwshRemotingCrossPlatform' | Should Be $True
-        $Commands -contains 'Download-NuGetPackage' | Should Be $True
         $Commands -contains 'Get-CertificateOverview' | Should Be $True
         $Commands -contains 'Get-Certificates' | Should Be $True
         $Commands -contains 'Get-CimPnpEntity' | Should Be $True
@@ -109,7 +104,6 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Get-RemoteDesktop' | Should Be $True
         $Commands -contains 'Get-ScheduledTasks' | Should Be $True
         $Commands -contains 'Get-ServerInventory' | Should Be $True
-        $Commands -contains 'Get-SSHProbe' | Should Be $True
         $Commands -contains 'Get-StorageDisk' | Should Be $True
         $Commands -contains 'Get-StorageFileShare' | Should Be $True
         $Commands -contains 'Get-StorageVolume' | Should Be $True
@@ -129,7 +123,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Module = Get-Module $env:BHProjectName
         [bool]$Module.Invoke({Get-Item function:AddWinRMTrustedHost}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:AddWinRMTrustLocalHost}) | Should Be $True
-        [bool]$Module.Invoke({Get-Item function:CheckSudoStatus}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:DownloadNugetPackage}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:EnableWinRMViaRPC}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetComputerObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetDomainController}) | Should Be $True
@@ -140,19 +134,16 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:GetNativePath}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetUserObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetWorkingCredentials}) | Should Be $True
-        [bool]$Module.Invoke({Get-Item function:InitializeSSH}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallFeatureDism}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallLinuxPackage}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InvokeModuleDependencies}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InvokePSCompatibility}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:ManualPSGalleryModuleInstall}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:NewUniqueString}) | Should Be $True
-        [bool]$Module.Invoke({Get-Item function:RemoveSudoPwd}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:ResolveHost}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestIsValidIPAddress}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestPort}) | Should Be $True
-        [bool]$Module.Invoke({Get-Item function:TestSSH}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:UnzipFile}) | Should Be $True
     }
 }
@@ -160,8 +151,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+b/IQ8yrM3X8PppDwMRVdzW3
-# UOmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNodOSiYsxU0RBZA96ZQixPp+
+# XPCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -218,11 +209,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHAQ3X3iDDMRA5Xv
-# +Ph+Xh6LZiajMA0GCSqGSIb3DQEBAQUABIIBAIeb4uxq2sXzctfSbNfj+9XbO32z
-# P9Mho/JQDaamh4mUYNI5EhwE0PdJGFYliVz8zScSDkcy2EJRtrZnAdeZG0dBOvM7
-# q3BPeXgyAJ8KweC8Cgjm7MASdLb1XXpWqYW+DBofSnF3sX3lueLD5zVz9vTDKjk2
-# U6GXGJUyxn6JTt/ojrE1twd+a/wPS4Wiq6mM1vayQNHLbDdonIzD9KIhHmeZiqx6
-# RjG8N/wNBfIttYAJWJoAp1sMh1mTQSSdbaO4UF2j2x7Q4hbbLAhnrgq5x/i0hlYv
-# 2UyxSAZ7IvZYu86NpJIhPDIci7dHF0ueFS3/sp2hBU8UVBMYyP6Ojqfkfmw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMriPBh4pemOXFkV
+# pGUPwuWj3Y5gMA0GCSqGSIb3DQEBAQUABIIBAB64RFXzG7veaH+wUMA1V/Mbvwhz
+# BUSVZcnTurEiuXwGWq1LJKrhSwI4J7gWOpmE0dhAM/z9LGNDeNjBraAqkJ5COjNA
+# w70XyphgSuIVBZcWTWwbKIUTkXFoa/dFQUE4JoI92jpNztCsDCIdLanC8gtzYT08
+# Qzt0t1h2S3+pLobmSgNax5rvknBRXmN/XSW6xRXL7NpFSnemd1A6IGBB9IG27QlM
+# 9Feb7HCVejwnwIj/VsbXtURq93vaVxglAJFN2MCLIjioKLhMbPWJGpKVWPgt5DKA
+# LveYr2iZduMFg3dLviFFujsE5erutvEHRV1apjwParE4w9cfPK+n2I5IrSM=
 # SIG # End signature block

@@ -14,6 +14,10 @@
         DependencyType  = 'PSGalleryNuget'
         Version         = 'Latest'
     }
+    'BootstrapPowerShellCore' = @{
+        DependencyType  = 'PSGalleryNuget'
+        Version         = 'Latest'
+    }
     <#
     'WindowsCompatibility' = @{
         DependencyType  = 'PSGalleryNuget'

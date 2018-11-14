@@ -57,10 +57,10 @@ function GetComputerObjectsInLDAP {
             }
             if ($CommandsNotPresent -contains "host" -or $CommandsNotPresent -contains "hostname" -or $CommandsNotPresent -contains "domainname") {
                 try {
-                    $null = InstallLinuxPackage -PossiblePackageNames @("dnsutils","bindutils","bind-tools") -CommandName "nslookup"
+                    $null = InstallLinuxPackage -PossiblePackageNames @("dnsutils","bindutils","bind-utils","bind-tools") -CommandName "nslookup"
                 }
                 catch {
-                    $null = $FailedInstalls.Add("dnsutils_bindutils_bind-tools")
+                    $null = $FailedInstalls.Add("dnsutils_bindutils_bind-utils_bind-tools")
                 }
             }
             if ($CommandsNotPresent -contains "ldapsearch") {
@@ -176,26 +176,30 @@ function GetComputerObjectsInLDAP {
         }
     }
     else {
-        <#
-        $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
-        $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-        $LDAPSearcher.Filter = "(&(objectCategory=Group))"
-        $LDAPSearcher.SizeLimit = 0
-        $LDAPSearcher.PageSize = 250
-        $GroupObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
-        #>
+        try {
+            if ($LDAPCreds) {
+                $LDAPUserName = $LDAPCreds.UserName
+                $LDAPPassword = $LDAPCreds.GetNetworkCredential().Password
+                $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri,$LDAPUserName,$LDAPPassword)
+            }
+            else {
+                $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
+            }
+            $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
+            $LDAPSearcher.Filter = "(objectClass=computer)"
+            $LDAPSearcher.SizeLimit = 0
+            $LDAPSearcher.PageSize = 250
+            $ComputerObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
 
-        $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
-        $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-        $LDAPSearcher.Filter = "(objectClass=computer)"
-        $LDAPSearcher.SizeLimit = $ObjectCount
-        $LDAPSearcher.PageSize = 250
-        $ComputerObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
-        <#
-        $null = $LDAPSearcher.PropertiesToLoad.Add("name")
-        [System.Collections.ArrayList]$ServerList = $($LDAPSearcher.FindAll().Properties.GetEnumerator()).name
-        $null = $ServerList.Insert(0,"Please Select a Server")
-        #>
+            if ($ObjectCount -gt 0) {
+                $ComputerObjectsInLDAP = $ComputerObjectsInLDAP[0..$($ObjectCount-1)]
+            }
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     $ComputerObjectsInLDAP
@@ -204,8 +208,8 @@ function GetComputerObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUxlI9RYsZD8w4jEfPdnwucf8j
-# s7agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFhv4JFGXbezfc9dlpPC9mrfX
+# pg2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -262,11 +266,11 @@ function GetComputerObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJoC+EpUxMXUe8wf
-# HaHoxxVKXL5nMA0GCSqGSIb3DQEBAQUABIIBALGBcOuucbA26ZikOpmqJ7GmIMiQ
-# TSYRGm+O2ILsf1Y16n66zdl4f1TaKhAmz092qHoNPeATg9Tt8YCXAlsDjh/BtdiR
-# swEy8zthkjptrs4s0ssDH6rT32Y/KkT28LcDSgo/355cfwGOO5rVBcLEkEJzAejO
-# KB0vXLGDX8fad5YF10qGWHIdLW62qY2T5I6YlDBR4HWTq3BxxfZxhpnXhYbQlgYr
-# 0WKMrJRU4+mJ+cNKNa+iVwspmQNyqFhUhyeWPhlCn03eTpz4U+J4oxpccZd46kEg
-# QbCY73X18SqJMOvLboX4LkkFnDQK03HTFTWj9Jf0yTM/DxeyXoHB27Bl4NI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB90UDh3Rk+Tx4p+
+# lgUPbVaEq7JaMA0GCSqGSIb3DQEBAQUABIIBAI/KQg2ck6+z00nvOZEQhyg/YQpt
+# YhOMqWyIQhTVCBlpMuu13m7ugYJAs42FsP/1dsBAupZRwHC3NLAXYu+1wXvC/lRd
+# gambdaXTKVUzoGnsZvdKa+odcVdqsA+wDCC9kZ7GHPJLtUUGjNoVcNJncjA6lXQJ
+# d3S/Bn+ZweVIgUOiqK/blD+yaslwslKtQ41/GOGUb2wf8fdCYjxexTLLLAy/xlHh
+# a92DcnwwW6viTrYfuZ2RumsMRtCGlV8gGIauipSnnISYtw6Oaa69SUZWRl85t8Wq
+# M3c/E35KaJZs7i5DXvcC9wbXfdmSiF8AqZXaYCwctJmwvHhXzQI5meR4jok=
 # SIG # End signature block

@@ -9,8 +9,14 @@ function GetDomainName {
         $Domain = domainname
         if (!$Domain -or $Domain -eq "(none)") {
             $ThisHostNamePrep = hostname
-            $ThisHostName = if ($ThisHostNamePrep -match "\.") {$($ThisHostNamePrep -split "\.")[0]} else {$ThisHostNamePrep}
+            if ($ThisHostNamePrep -match "\.") {
+                $HostNameArray = $ThisHostNamePrep -split "\."
+                $ThisHostName = $HostNameArray[0]
+                $Domain = $HostNameArray[1..$HostNameArray.Count] -join '.'
+            }
+        }
             
+        if (!$Domain) {
             $EtcHostsContent = Get-Content "/etc/hosts"
             $EtcHostsContentsArray = $(foreach ($HostLine in $EtcHostsContent) {
                 $HostLine -split "[\s]" | foreach {$_.Trim()}
@@ -73,8 +79,8 @@ function GetDomainName {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUb0s2CJ1uxZKDyvSgy4dGe2l/
-# WKKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUeqfJM3K8A6InvC/wFroQypby
+# GAegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -131,11 +137,11 @@ function GetDomainName {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBSqMtpb4IaTkzgo
-# qMeeytIzp/YRMA0GCSqGSIb3DQEBAQUABIIBABZtDckO02cArAtjIBSDWqD5UTXh
-# sRRY3aEEJHCdlCEbWjSUtvDpoNqc0mOGHmINMcKYgIEfs8T8+zH0/cErk+gPAG4o
-# abIN5x3d4eGvZpjst6jd0+EUjZhe4bAMVogxSMstCRPY08cLaV08oE3PWGqtH/DQ
-# eA5K0++r1OXiIn+ZQ7oJbTYWD4ssa5Hx0f2OrxTFO9eumU8TdRtfJg1F4Oc5UMCT
-# YoGwlkU86uEvAXb6QDzgXtdB+n6XLpI6zZAVj4x958fxYG7iyfwEABqZADyi/f2a
-# NtmG5sTUt8DPCUvEWj3OyFAQsE1/3DbbwnwWy5IlwuQ3rIFH1Ptzv7RWJUY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB3ruEh/mYMtUExt
+# iRiNS8K/Li5mMA0GCSqGSIb3DQEBAQUABIIBAEXkeZLiESIA9aItTOhYqhiJ+vQL
+# 4uZ1VgfhEocxcsZ6G0XSOovUA2ETNTl2JsQB9ZyswlqxoduYU2Q6N4H4QrjxMyNs
+# /5mQKvTbzH8NyeiTzzRP/AVqnAuJb9aNpv3KtcON0UrRN6P2ULrNDvNtlbDvDp+U
+# EvdB5DD7zhxnWSOP7weXa9lH/IYGYlG/u9sudyBOLfx4Ui5QRB6SG6YaszObgHLZ
+# qu6HfNVV+qTVt4vLlRRpUj8uWtGt/CsVYROMV4X5aWw9/jjtKOBmsrkMpYm0qF6D
+# jtJvIQOJhiedJKc2AZTodF3G8xWEIH+UkwgdL2darTCfmEWYQsU1Z5c10gM=
 # SIG # End signature block

@@ -1,9 +1,11 @@
-Function TestLDAP {
+function TestLDAP {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$True)]
         [string]$ADServerHostNameOrIP
     )
+
+    #region >> Prep
 
     if ($PSVersionTable.Platform -eq "Unix") {
         # If we're on Linux, we need the Novell .Net Core library
@@ -15,7 +17,7 @@ Function TestLDAP {
                     $null = Remove-Item -Path $NovellDownloadDir -Recurse -Force
                 }
 
-                $NovellPackageInfo = Download-NuGetPackage -AssemblyName "Novell.Directory.Ldap.NETStandard" -NuGetPkgDownloadDirectory $NovellDownloadDir -Silent
+                $NovellPackageInfo = DownloadNuGetPackage -AssemblyName "Novell.Directory.Ldap.NETStandard" -NuGetPkgDownloadDirectory $NovellDownloadDir -Silent
                 $AssemblyToLoadPath = $NovellPackageInfo.AssemblyToLoad
 
                 if (![bool]$($CurrentlyLoadedAssemblies -match [regex]::Escape("Novell.Directory.Ldap.NETStandard"))) {
@@ -30,24 +32,26 @@ Function TestLDAP {
         }
     }
 
-    # Make sure you CAN resolve $ADServerHostNameOrIP AND that we can get FQDN
     try {
-        $ADServerNetworkInfo = [System.Net.Dns]::GetHostEntry($ADServerHostNameOrIP)
-        if ($ADServerNetworkInfo.HostName -notmatch "\.") {
-            $IP = $ADServerNetworkInfo.AddressList[0].IPAddressToString
-            $ADServerNetworkInfo = [System.Net.Dns]::GetHostEntry($IP)
-            if ($ADServerNetworkInfo.HostName -notmatch "\.") {
-                throw "Can't resolve $ADServerHostNameOrIP FQDN! Halting!"
-            }
-        }
+        $ADServerNetworkInfo = ResolveHost -HostNameOrIP $ADServerHostNameOrIP -ErrorAction Stop
     }
     catch {
-        Write-Error $_
+        Write-Error "Unable to resolve $ADServerHostNameOrIP! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
-    $ADServerFQDN = $ADServerNetworkInfo.HostName
+    if (!$ADServerNetworkInfo.FQDN) {
+        Write-Error "Unable to determine FQDN of $ADServerHostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    #endregion >> Prep
+
+    #region >> Main
+
+    $ADServerFQDN = $ADServerNetworkInfo.FQDN
 
     $LDAPPrep = "LDAP://" + $ADServerFQDN
 
@@ -179,13 +183,15 @@ Function TestLDAP {
         ConfiguredForSSL636                 = if ($ConfiguredForSSL) {$True} else {$False}
         PortsThatWork                       = $PortsThatWork
     }
+
+    #endregion >> Main
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcGYID+Y7XVL1zQtMbCoMSWtj
-# n1Ggggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK5OtyUEbqz1TViTpCpSRqhLD
+# WxGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -242,11 +248,11 @@ Function TestLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDgH3hGRWXQI88ti
-# JzFlc5R6yL3PMA0GCSqGSIb3DQEBAQUABIIBAE/i3mv8jgNyj814Xk3PUIyfYuRg
-# AStpwvsdtbIQaI6bdIaJUo+29AkmolzH5kLx9LbJQBrlBV49iyzHmiMJbhWCr4X3
-# l7mDdJzZ7JbeFOWD6746vUoC+ieF9fGPbwjkG/7q+jTEUqWOq+3N6Kfo1Int/bDT
-# AzXM230Ce3ZhA5fBLowutJ3ZdSzBXqG0Yvabw5xVvLUabzwGf3xHfllRtYWrGnuW
-# OUO2SziYM3MpdO2lm39cctVKrTQ28fbLiNpfq735g+4WQbT1vnwd3tbhcSsdoIGC
-# qIR1F9IPtf1SDS80iZfw0zBSYPWA5zprPJZ6mRdJ6ZhCkd7EH2YisloYVkU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHdHaDhR+1PvsQFr
+# 6JHPzhdN1phMMA0GCSqGSIb3DQEBAQUABIIBAIL8fgzqnB58UAcUkM1Hj4kEbitc
+# 8ppu2O7z3eCG0lmISKj2tXfCwFjX3h6m9amP829U1zvE3Uug7ak4J5KnRqeW/hM8
+# MHe801+4e+5Pj2v0DMsa4Syqv3GTbVdIz6/gM3frfi6iEkeKw3891XMPS14NtXoD
+# ouOU6RmVezpFHOLfvIUeJoiEzkmEkp5HiW9K8pOSjY5QcL1z5IS8GhALqk+CMU2X
+# afZqYvPZVTEtbvjCD+J7tgLe9p9EcS2k+mx3z79J4t/9yTmk1cRRULGRe28VXc26
+# vuMJXRp9UpxbwUMmBRuZreChrvXbb4rbdrIWew2IT2CoHtIZ/lxH4k7BEoI=
 # SIG # End signature block
